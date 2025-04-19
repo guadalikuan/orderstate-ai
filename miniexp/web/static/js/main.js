@@ -24,32 +24,61 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初始化Socket.IO连接
     function initializeSocket() {
-        // 连接到服务器
-        socket = io();
-        
-        // 服务器消息处理
-        socket.on('server_message', function(data) {
-            addMessage(data.message);
-        });
-        
-        // 状态更新处理
-        socket.on('state_update', function(data) {
-            updateGridWorld(data);
-            updateStatusInfo(data);
-        });
-        
-        // 实验完成处理
-        socket.on('experiment_complete', function(data) {
-            addMessage(data.message);
-            fetchResults();
-            updateUIState(false);
-        });
-        
-        // 连接断开处理
-        socket.on('disconnect', function() {
-            addMessage('与服务器的连接已断开');
-            updateUIState(false);
-        });
+        try {
+            console.log("尝试初始化Socket.IO连接...");
+            // 连接到服务器（强制使用WebSocket传输）
+            socket = io({
+                transports: ['websocket', 'polling'],
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000
+            });
+            
+            socket.on('connect', function() {
+                console.log("Socket.IO连接成功！Socket ID:", socket.id);
+                addMessage("已连接到服务器");
+            });
+            
+            socket.on('connect_error', function(error) {
+                console.error("Socket.IO连接错误:", error);
+                addMessage("连接服务器时出错: " + error);
+            });
+            
+            // 服务器消息处理
+            socket.on('server_message', function(data) {
+                console.log("收到服务器消息:", data);
+                addMessage(data.message);
+            });
+            
+            // 状态更新处理
+            socket.on('state_update', function(data) {
+                console.log("收到状态更新:", data);
+                updateGridWorld(data);
+                updateStatusInfo(data);
+            });
+            
+            // 实验完成处理
+            socket.on('experiment_complete', function(data) {
+                console.log("实验完成:", data);
+                addMessage(data.message);
+                fetchResults();
+                updateUIState(false);
+            });
+            
+            // 连接断开处理
+            socket.on('disconnect', function(reason) {
+                console.log("Socket.IO连接断开, 原因:", reason);
+                addMessage(`与服务器的连接已断开: ${reason}`);
+                updateUIState(false);
+            });
+            
+            // 调试用的事件，显示所有收到的事件
+            socket.onAny((event, ...args) => {
+                console.log(`收到事件 ${event}:`, args);
+            });
+        } catch (error) {
+            console.error("初始化Socket.IO连接时出错:", error);
+            addMessage("无法初始化Socket.IO连接: " + error);
+        }
     }
     
     // 初始化网格世界
@@ -92,6 +121,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 更新网格世界
     function updateGridWorld(data) {
+        console.log("收到状态更新:", data);
+        
         // 如果网格尺寸变化，重新初始化
         if (data.grid_width !== gridWidth || data.grid_height !== gridHeight) {
             gridWidth = data.grid_width;
@@ -107,40 +138,58 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // 设置新的agent位置
-        const [row, col] = data.state;
-        const cell = document.getElementById(`cell-${row}-${col}`);
-        if (cell) {
-            cell.classList.add('agent');
+        try {
+            // 设置新的agent位置
+            const [row, col] = data.state;
+            console.log(`尝试更新Agent位置: row=${row}, col=${col}`);
+            const cellId = `cell-${row}-${col}`;
+            console.log(`寻找元素: #${cellId}`);
             
-            // 根据智能体类型添加不同样式
-            if (data.agent === 'EnergyAgent') {
-                cell.classList.add('energy-agent');
-                if (cell.classList.contains('target')) {
-                    cell.innerHTML = 'A+T';
+            const cell = document.getElementById(cellId);
+            if (cell) {
+                console.log(`找到单元格 ${cellId}，更新显示`);
+                cell.classList.add('agent');
+                
+                // 根据智能体类型添加不同样式
+                if (data.agent === 'EnergyAgent') {
+                    cell.classList.add('energy-agent');
+                    if (cell.classList.contains('target')) {
+                        cell.innerHTML = 'A+T';
+                    } else {
+                        // 添加能量显示
+                        if (data.energy !== undefined) {
+                            cell.innerHTML = `<div class="agent-indicator">A</div>
+                                             <div class="energy-display">${data.energy.toFixed(1)}</div>`;
+                        } else {
+                            cell.innerHTML = 'A';
+                        }
+                    }
                 } else {
-                    // 添加能量显示
-                    if (data.energy !== undefined) {
-                        cell.innerHTML = `<div class="agent-indicator">A</div>
-                                         <div class="energy-display">${data.energy.toFixed(1)}</div>`;
+                    cell.classList.add('baseline-agent');
+                    if (cell.classList.contains('target')) {
+                        cell.innerHTML = 'A+T';
                     } else {
                         cell.innerHTML = 'A';
                     }
                 }
+                
+                // 添加动画效果
+                cell.classList.add('pulse');
+                setTimeout(() => {
+                    cell.classList.remove('pulse');
+                }, 500);
             } else {
-                cell.classList.add('baseline-agent');
-                if (cell.classList.contains('target')) {
-                    cell.innerHTML = 'A+T';
-                } else {
-                    cell.innerHTML = 'A';
+                console.error(`未找到单元格: #${cellId}`);
+                // 调试信息：输出所有网格单元格的ID
+                const allCells = document.querySelectorAll('.grid-cell');
+                console.log(`当前网格有 ${allCells.length} 个单元格`);
+                if (allCells.length < 20) {
+                    const cellIds = Array.from(allCells).map(c => c.id);
+                    console.log("可用的单元格ID:", cellIds);
                 }
             }
-            
-            // 添加动画效果
-            cell.classList.add('pulse');
-            setTimeout(() => {
-                cell.classList.remove('pulse');
-            }, 500);
+        } catch (error) {
+            console.error("更新网格世界时出错:", error);
         }
     }
     

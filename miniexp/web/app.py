@@ -23,7 +23,15 @@ from miniexp.metrics import MetricsRecorder
 # 创建Flask应用
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+# 配置Socket.IO，启用CORS，并明确指定传输方式
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    async_mode='eventlet',  # 使用eventlet作为异步模式
+    logger=True,            # 启用日志记录
+    engineio_logger=True    # 启用引擎日志记录
+)
 
 # 保存当前实验状态的全局变量
 experiment_status = {
@@ -193,103 +201,117 @@ def handle_disconnect():
 def run_experiment_thread(episodes, max_steps, display_interval):
     global experiment_status
     
-    env = experiment_status['env']
-    agents = experiment_status['agents']
-    metrics_recorder = experiment_status['metrics']
-    
-    # 为每个智能体运行实验
-    overall_episode = 0
-    for agent_name, agent in agents.items():
-        experiment_status['current_agent'] = agent_name
+    try:
+        env = experiment_status['env']
+        agents = experiment_status['agents']
+        metrics_recorder = experiment_status['metrics']
         
-        for episode in range(episodes):
-            if not experiment_status['running']:
-                break
+        # 为每个智能体运行实验
+        overall_episode = 0
+        for agent_name, agent in agents.items():
+            experiment_status['current_agent'] = agent_name
+            print(f"开始运行智能体: {agent_name}")
             
-            experiment_status['episode'] = overall_episode + 1
-            overall_episode += 1
-            
-            # 重置环境和智能体
-            state = env.reset()
-            agent.reset()
-            experiment_status['current_state'] = state
-            experiment_status['step'] = 0
-            
-            # 发送初始状态
-            emit_state_update(agent_name, state, 0, 0.0 if isinstance(agent, EnergyAgent) else None, 0.0 if isinstance(agent, EnergyAgent) else None)
-            
-            # 回合状态变量
-            done = False
-            steps = 0
-            is_success = False
-            energy_exhausted_flag = False
-            
-            # 运行单个回合
-            while not done and steps < max_steps and experiment_status['running']:
-                experiment_status['step'] = steps + 1
+            for episode in range(episodes):
+                if not experiment_status['running']:
+                    break
                 
-                # 执行一步
-                next_state, reward, done = agent.step(state)
+                experiment_status['episode'] = overall_episode + 1
+                overall_episode += 1
+                print(f"开始回合 {episode+1}/{episodes} - 智能体: {agent_name}")
                 
-                # 获取能量信息（如果是EnergyAgent）
-                energy_left = None
-                anxiety = None
+                # 重置环境和智能体
+                state = env.reset()
+                agent.reset()
+                experiment_status['current_state'] = state
+                experiment_status['step'] = 0
+                
+                # 发送初始状态
+                emit_state_update(agent_name, state, 0, 0.0 if isinstance(agent, EnergyAgent) else None, 0.0 if isinstance(agent, EnergyAgent) else None)
+                
+                # 回合状态变量
+                done = False
+                steps = 0
+                is_success = False
+                energy_exhausted_flag = False
+                
+                # 运行单个回合
+                while not done and steps < max_steps and experiment_status['running']:
+                    try:
+                        experiment_status['step'] = steps + 1
+                        
+                        # 执行一步
+                        next_state, reward, done = agent.step(state)
+                        
+                        # 获取能量信息（如果是EnergyAgent）
+                        energy_left = None
+                        anxiety = None
+                        if isinstance(agent, EnergyAgent):
+                            energy_left = agent.get_remaining_energy()
+                            anxiety = agent.energy_module.get_anxiety()
+                        
+                        # 更新状态
+                        experiment_status['current_state'] = next_state
+                        
+                        # 发送状态更新
+                        emit_state_update(agent_name, next_state, steps + 1, energy_left, anxiety)
+                        
+                        state = next_state
+                        steps += 1
+                        
+                        # 检查结束条件
+                        if done:
+                            if isinstance(agent, EnergyAgent) and agent.is_energy_exhausted():
+                                is_success = False
+                                energy_exhausted_flag = True
+                                emit_message(f"{agent_name} 能量耗尽，失败于步骤 {steps}")
+                            elif state == env.target_pos:
+                                is_success = True
+                                emit_message(f"{agent_name} 成功到达目标，步数: {steps}")
+                            else:
+                                is_success = False
+                        
+                        # 短暂延迟，以便于可视化
+                        time.sleep(display_interval)
+                    except Exception as e:
+                        print(f"步骤执行出错: {e}")
+                        time.sleep(display_interval)
+                
+                # 检查是否超时
+                if not done and steps >= max_steps:
+                    is_success = False
+                    emit_message(f"{agent_name} 超时，步数: {steps}")
+                
+                # 记录实验结果
+                energy_left = np.nan
                 if isinstance(agent, EnergyAgent):
                     energy_left = agent.get_remaining_energy()
-                    anxiety = agent.energy_module.get_anxiety()
+                    
+                metrics_recorder.record(
+                    agent_name=agent_name,
+                    success=is_success,
+                    steps=steps,
+                    energy_left=energy_left,
+                    energy_exhausted=energy_exhausted_flag
+                )
                 
-                # 更新状态
-                experiment_status['current_state'] = next_state
-                
-                # 发送状态更新
-                emit_state_update(agent_name, next_state, steps + 1, energy_left, anxiety)
-                
-                state = next_state
-                steps += 1
-                
-                # 检查结束条件
-                if done:
-                    if isinstance(agent, EnergyAgent) and agent.is_energy_exhausted():
-                        is_success = False
-                        energy_exhausted_flag = True
-                        emit_message(f"{agent_name} 能量耗尽，失败于步骤 {steps}")
-                    elif state == env.target_pos:
-                        is_success = True
-                        emit_message(f"{agent_name} 成功到达目标，步数: {steps}")
-                    else:
-                        is_success = False
-                
-                # 短暂延迟，以便于可视化
-                time.sleep(display_interval)
-            
-            # 检查是否超时
-            if not done and steps >= max_steps:
-                is_success = False
-                emit_message(f"{agent_name} 超时，步数: {steps}")
-            
-            # 记录实验结果
-            energy_left = np.nan
-            if isinstance(agent, EnergyAgent):
-                energy_left = agent.get_remaining_energy()
-                
-            metrics_recorder.record(
-                agent_name=agent_name,
-                success=is_success,
-                steps=steps,
-                energy_left=energy_left,
-                energy_exhausted=energy_exhausted_flag
-            )
-    
-    # 实验完成，发送结果
-    if experiment_status['running']:
-        experiment_status['running'] = False
-        summary_df = metrics_recorder.summarize(plot=False)
-        results = summary_df.to_dict('index') if summary_df is not None else {}
+                print(f"回合 {episode+1} 完成 - 智能体: {agent_name}, 成功: {is_success}, 步数: {steps}")
         
-        socketio.emit('experiment_complete', {
-            'message': '实验已完成',
-            'results': results
-        })
+        # 实验完成，发送结果
+        if experiment_status['running']:
+            experiment_status['running'] = False
+            summary_df = metrics_recorder.summarize(plot=False)
+            results = summary_df.to_dict('index') if summary_df is not None else {}
+            
+            socketio.emit('experiment_complete', {
+                'message': '实验已完成',
+                'results': results
+            })
+            print("实验完成，结果已发送")
+    except Exception as e:
+        print(f"实验线程发生错误: {e}")
+        experiment_status['running'] = False
+        socketio.emit('server_message', {'message': f'实验出错: {str(e)}'})
 
 # 发送状态更新到客户端
 def emit_state_update(agent_name, state, step, energy=None, anxiety=None):
@@ -307,7 +329,11 @@ def emit_state_update(agent_name, state, step, energy=None, anxiety=None):
     if anxiety is not None:
         data['anxiety'] = anxiety
     
-    socketio.emit('state_update', data)
+    # 添加日志输出，帮助调试
+    print(f"发送状态更新: agent={agent_name}, state={state}, step={step}")
+    
+    # 使用带命名空间的emit，确保消息发送到所有客户端
+    socketio.emit('state_update', data, namespace='/', broadcast=True)
 
 # 发送消息到客户端
 def emit_message(message):
@@ -315,4 +341,6 @@ def emit_message(message):
 
 # 主函数
 if __name__ == '__main__':
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000) 
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    
+# 修复网格世界实时更新问题 
