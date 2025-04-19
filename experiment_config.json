@@ -1,0 +1,37 @@
+{
+    "environment": {
+        "width": 10,
+        "height": 10,
+        "type": "medium",
+        "obstacle_density": 0.2,
+        "num_predators": 2,
+        "num_moving_obstacles": 3
+    },
+    "agent": {
+        "initial_energy": 100.0,
+        "energy_threshold": 20.0,
+        "initial_perception_level": 1,
+        "initial_decision_level": 1,
+        "max_perception_level": 5,
+        "max_decision_level": 5
+    },
+    "experiment": {
+        "max_episodes": 5,
+        "max_steps_per_episode": 200,
+        "save_interval": 100,
+        "visualization": true
+    },
+    "rewards": {
+        "target_reached": 100,
+        "step_penalty": -1,
+        "obstacle_collision": -10,
+        "predator_collision": -20,
+        "survival_bonus": 1
+    },
+    "evolution": {
+        "min_episodes_for_evolution": 10,
+        "success_rate_threshold": 0.8,
+        "reward_threshold": 50,
+        "survival_time_threshold": 60
+    }
+}

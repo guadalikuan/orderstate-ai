@@ -2,9 +2,36 @@ from typing import Dict, Any, List
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+import matplotlib as mpl
 import seaborn as sns
 from matplotlib.widgets import Button, Slider
 import matplotlib.gridspec as gridspec
+import matplotlib.font_manager as fm
+import os
+
+# 设置中文字体支持
+def setup_chinese_font():
+    # 尝试使用系统中的中文字体
+    chinese_fonts = ['SimHei', 'Microsoft YaHei', 'SimSun', 'FangSong', 'KaiTi']
+    
+    font_found = False
+    for font_name in chinese_fonts:
+        try:
+            font_path = fm.findfont(font_name, fallback_to_default=False)
+            if font_path:
+                plt.rcParams['font.family'] = [font_name]
+                mpl.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+                font_found = True
+                print(f"可视化器使用中文字体: {font_name}")
+                break
+        except:
+            continue
+            
+    if not font_found:
+        print("警告: 未找到中文字体，图表中的中文可能无法正确显示")
+
+# 初始化中文字体
+setup_chinese_font()
 
 class StateVisualizer:
     """

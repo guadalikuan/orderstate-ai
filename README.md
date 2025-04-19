@@ -1,153 +1,131 @@
-# OrderState-AI 实验系统
+# 八阶段闭环与生存焦虑驱动注意力实验
 
-## 项目概述
+这个项目实现了一个智能体模拟系统，演示"能量→信号→数据→信息→知识→智慧→决策→动作→能量"八阶段闭环及"生存焦虑驱动Attention"机制。
 
-OrderState-AI是一个基于八阶段秩序状态循环和生存焦虑驱动注意力机制的AI系统实验平台。该系统通过模拟不同复杂度的环境，研究智能体在能量管理和焦虑影响下的行为演化过程。
+## 系统概述
 
-## 核心概念
+本系统模拟了不同智能体在多种环境中的行为表现，特别关注在能量受限情况下智能体的注意力分配策略。
 
-### 八阶段秩序状态循环
-1. **能量(Energy)**: 智能体的基本生存资源
-2. **信号(Signal)**: 环境中的原始刺激
-3. **数据(Data)**: 经过感知处理的信号集合
-4. **信息(Information)**: 具有意义的数据组合
-5. **知识(Knowledge)**: 信息之间的关联和模式
-6. **智慧(Wisdom)**: 知识的应用和决策能力
-7. **决策(Decision)**: 基于智慧的判断和选择
-8. **行动(Action)**: 决策的执行和反馈
+### 核心概念
 
-### 生存焦虑驱动注意力机制
-- 能量水平影响感知范围和精度
-- 焦虑程度影响决策质量和速度
-- 动态调整注意力资源分配
+1. **八阶段闭环**：一个完整的认知-行动循环，包括：
+   - 能量 → 信号：智能体的能量状态影响内部焦虑信号
+   - 信号 → 数据：环境状态被感知并转化为特征表示
+   - 数据 → 信息：通过注意力机制处理特征
+   - 信息 → 知识：智能体内部模型解释信息
+   - 知识 → 智慧：智能体根据知识权衡不同决策
+   - 智慧 → 决策：选择最佳行动
+   - 决策 → 动作：执行选定的动作
+   - 动作 → 能量：行动消耗能量，循环回到第一阶段
 
-## 系统架构
+2. **生存焦虑驱动注意力**：
+   - 当能量接近阈值时，智能体产生焦虑感
+   - 焦虑度越高，注意力分布越集中（更警觉）
+   - 焦虑度越低，注意力分布越均匀（更探索）
 
-### 环境系统
-- **基础环境(BaseEnvironment)**: 定义环境接口
-- **简单环境(SimpleEnvironment)**: 无障碍物，固定目标
-- **中等环境(MediumEnvironment)**: 静态障碍物，固定目标
-- **高级环境(AdvancedEnvironment)**: 动态障碍物，移动目标，捕食者
+## 安装指南
 
-### 智能体系统
-- **基础智能体(BaseAgent)**: 核心功能实现
-- **感知能力(PerceptionAbility)**: 管理感知范围和精度
-- **决策能力(DecisionAbility)**: 管理决策质量和速度
-- **进化系统(EvolutionSystem)**: 管理能力提升和适应
-
-### 可视化系统
-- **状态可视化(StateVisualizer)**: 实时显示环境状态
-- **进化可视化(EvolutionVisualizer)**: 展示进化过程
-- **指标可视化(MetricsVisualizer)**: 显示性能指标
-
-### 实验报告系统
-- **数据收集**: 记录实验过程中的关键指标
-- **图表生成**: 创建可视化图表
-- **报告生成**: 生成HTML格式的详细报告
-
-## 主要功能
-
-### 1. 环境模拟
-- 支持多种环境复杂度
-- 动态障碍物和捕食者
-- 可配置的环境参数
-
-### 2. 智能体进化
-- 基于性能的能力提升
-- 动态调整感知和决策能力
-- 记录进化历史
-
-### 3. 实时可视化
-- 环境状态实时显示
-- 智能体行为可视化
-- 性能指标实时更新
-
-### 4. 实验报告
-- 详细的实验配置记录
-- 关键指标统计分析
-- 可视化图表展示
-- 进化历史记录
-
-## 安装说明
+### 使用Anaconda（推荐）
 
 1. 克隆仓库：
-```bash
-git clone https://github.com/yourusername/orderstate-ai.git
-cd orderstate-ai
-```
+   ```bash
+   git clone <repository-url>
+   cd orderstate-ai
+   ```
+
+2. 使用环境配置文件创建Conda环境：
+   ```bash
+   conda env create -f environment.yml
+   ```
+
+3. 激活环境：
+   ```bash
+   conda activate orderstate-ai
+   ```
+
+### 使用pip
+
+1. 克隆仓库：
+   ```bash
+   git clone <repository-url>
+   cd orderstate-ai
+   ```
 
 2. 安装依赖：
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+## 运行实验
+
+### 命令行实验
+
+运行基本实验：
 ```bash
-pip install -r requirements.txt
+python -m miniexp.main
 ```
 
-## 使用方法
-
-### 1. 启动实验
+使用特定环境类型和回合数：
 ```bash
-python run_experiment.py --env_type [simple|medium|advanced] --agent_type [baseline|energy]
+python -m miniexp.main --env medium --episodes 50
 ```
 
-### 2. 参数配置
-- `--env_type`: 环境类型
-- `--agent_type`: 智能体类型
-- `--episodes`: 实验周期数
-- `--max_steps`: 每个周期最大步数
-- `--obstacle_density`: 障碍物密度
-- `--predator_count`: 捕食者数量
+查看所有选项：
+```bash
+python -m miniexp.main --help
+```
 
-### 3. 查看报告
-实验完成后，报告将自动生成在`reports`目录下，包含：
-- 实验配置
-- 关键指标
-- 性能图表
-- 进化历史
+或使用快捷脚本：
+```bash
+python run_experiment.py --env advanced --episodes 20
+```
 
-## 实验报告内容
+### Web可视化实验
 
-### 1. 实验配置
-- 环境参数
-- 智能体参数
-- 实验设置
+启动Web可视化界面：
+```bash
+python run_web_experiment.py
+```
 
-### 2. 关键指标
-- 总周期数
-- 平均奖励
-- 最终感知能力
-- 最终决策能力
-- 平均生存时间
-- 成功率
+这将启动服务器，并自动打开浏览器访问http://localhost:5000
 
-### 3. 性能图表
-- 奖励变化趋势
-- 能力等级变化
-- 生存时间变化
-- 成功率变化
-- 避障统计
-- 避捕食者统计
-- 综合性能雷达图
+## 系统组件
 
-### 4. 进化历史
-- 进化时间点
-- 进化原因
-- 能力变化
+### 环境系统
+- **SimpleEnvironment**: 基础环境，无障碍物
+- **MediumEnvironment**: 中等环境，有静态障碍物
+- **AdvancedEnvironment**: 高级环境，有动态障碍物和捕食者
 
-## 贡献指南
+### 智能体系统
+- **BaselineAgent**: 基线智能体，随机决策
+- **EnergyAgent**: 能量智能体，包含能量管理和焦虑机制
 
-欢迎贡献代码、报告问题或提出改进建议。请遵循以下步骤：
+### 实验系统
+- **Experiment**: 实验配置和执行
+- **MetricsRecorder**: 记录和统计实验指标
+- **ExperimentReport**: 生成实验报告
 
-1. Fork 项目
-2. 创建特性分支
-3. 提交更改
-4. 推送到分支
-5. 创建 Pull Request
+### 可视化系统
+- Web界面：实时展示实验过程
+- 八阶段循环可视化：显示每个阶段的状态
+- 性能指标图表：展示智能体表现
+
+## 常见问题
+
+1. **中文显示问题**：
+   如果图表中的中文显示为方块，请确保系统安装了中文字体，并在Windows系统上安装pywin32。
+
+2. **Web界面启动失败**：
+   - 检查端口5000是否被占用：`netstat -an | findstr 5000`
+   - 确认依赖版本兼容：特别是flask, werkzeug和socketio的版本
+
+3. **环境创建失败**：
+   请检查您的Python版本（推荐3.8-3.9），确保兼容性。
 
 ## 许可证
 
-本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
+MIT
 
 ## 联系方式
 
-如有任何问题或建议，请通过以下方式联系：
-- 提交 Issue
-- 发送邮件至 [your-email@example.com] 
+如有问题或建议，请[提交issue](https://github.com/yourusername/orderstate-ai/issues)。 

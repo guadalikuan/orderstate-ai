@@ -1,0 +1,66 @@
+# OrderState-AI 系统清理指南
+
+## 废代码和重复文件
+
+1. **重复的环境实现**:
+   - `miniexp/env.py` 和 `miniexp/env/base.py` 存在功能重叠
+   - 建议: 保留 `miniexp/env/base.py` 及其实现，删除 `miniexp/env.py`
+
+2. **重复的智能体实现**:
+   - `miniexp/agent.py` 和 `miniexp/agent/base.py` 功能重叠
+   - 建议: 保留 `miniexp/agent/base.py` 及其实现，删除 `miniexp/agent.py`
+
+3. **废弃的测试脚本**:
+   - `test_web.py` 是临时测试用，可以删除
+   - `simple_web_experiment.py` 是临时解决方案，可以删除
+
+## 修复步骤
+
+1. **环境清理**:
+   ```bash
+   rm miniexp/env.py
+   rm miniexp/agent.py
+   rm test_web.py
+   rm simple_web_experiment.py
+   ```
+
+2. **更新导入路径**:
+   - 检查 `miniexp/__init__.py` 中的导入路径，修正已删除文件的引用
+   - 检查 `run_experiment.py` 中的导入路径
+
+3. **版本依赖统一**:
+   - 使用已更新的 `requirements.txt` 和 `environment.yml` 文件安装依赖
+   - 确保 Flask 和 Werkzeug 版本兼容
+
+4. **启动命令**:
+   ```bash
+   # 安装环境
+   conda env create -f environment.yml
+   conda activate orderstate-ai
+   
+   # 或使用pip
+   pip install -r requirements.txt
+   
+   # 运行命令行实验
+   python run_experiment.py --env medium --episodes 10
+   
+   # 运行Web实验
+   python run_web_experiment.py
+   ```
+
+## 已更新的文件
+
+1. `requirements.txt`: 更新了依赖版本以确保兼容性
+2. `environment.yml`: 新增了Anaconda环境配置文件
+3. `run_experiment.py`: 简化和更新了命令行实验脚本
+4. `run_web_experiment.py`: 添加了错误处理和兼容性修复
+5. `README.md`: 更新了系统文档和使用指南
+
+## 遗留问题
+
+1. Web界面可能仍有兼容性问题，取决于操作系统和Python版本
+2. 确保所有模块导入正确，可能需要调整部分代码的导入路径
+3. 可能需要创建`reports`目录以存储实验报告:
+   ```bash
+   mkdir -p reports
+   ``` 

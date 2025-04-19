@@ -1,23 +1,29 @@
-# miniexp package
-# 能量→信号→数据→信息→知识→智慧→决策→动作→能量 八阶段闭环模拟实验
+"""
+OrderState AI实验库
+用于智能体进化实验的工具包
+"""
 
-__version__ = '0.1.0'
+__version__ = "0.1.0"
 
-# 导出环境类
-from miniexp.env import (
-    SimpleEnvironment,
-    MediumEnvironment,
-    AdvancedEnvironment
-)
+# 导入环境模块
+from miniexp.env.simple import SimpleEnvironment
+from miniexp.env.medium import MediumEnvironment 
+from miniexp.env.advanced import AdvancedEnvironment
+from miniexp.env.base import BaseEnvironment
 
-# 导出智能体类
-from miniexp.agent import (
-    BaselineAgent,
-    EnergyAgent
-)
+# 导入智能体模块
+from miniexp.agent.baseline import BaselineAgent
+from miniexp.agent.energy import EnergyAgent
+from miniexp.agent.base import BaseAgent
 
-# 导出实验类
-from miniexp.experiment import Experiment
+# 导入实验模块
+from miniexp.experiment.experiment import Experiment
+from miniexp.experiment.metrics_recorder import MetricsRecorder
+from miniexp.experiment.report import ExperimentReport
+from miniexp.experiment.config import ExperimentConfig, EnvironmentType, AgentType
 
-# 导出指标记录器
-from miniexp.metrics import MetricsRecorder 
+# 导入工具函数
+from miniexp.utils import setup_chinese_font, create_fonts_directory
+
+# 自动设置中文字体支持
+setup_chinese_font() 

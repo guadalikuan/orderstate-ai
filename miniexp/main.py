@@ -3,12 +3,18 @@ import time
 import sys
 import os
 import argparse
+import json
 
 # 导入项目模块
-from miniexp.env import SimpleEnvironment, MediumEnvironment, AdvancedEnvironment
-from miniexp.agent import BaselineAgent, EnergyAgent
-from miniexp.metrics import MetricsRecorder, matplotlib_available
+from miniexp.env.simple import SimpleEnvironment
+from miniexp.env.medium import MediumEnvironment
+from miniexp.env.advanced import AdvancedEnvironment
+from miniexp.agent.baseline import BaselineAgent
+from miniexp.agent.energy import EnergyAgent
+from miniexp.experiment.metrics_recorder import MetricsRecorder
 from miniexp.experiment.experiment import Experiment
+from miniexp.experiment.config import ExperimentConfig, EnvironmentType, AgentType
+from miniexp.experiment.evaluator import ExperimentEvaluator
 
 # 实验参数
 GRID_WIDTH = 10
@@ -20,29 +26,36 @@ MAX_STEPS_PER_EPISODE = GRID_WIDTH * GRID_HEIGHT * 2  # 每回合最大步数
 INIT_ENERGY = (GRID_WIDTH + GRID_HEIGHT) * 1.5   # 初始能量，略多于曼哈顿距离
 ENERGY_THRESHOLD = INIT_ENERGY * 0.2             # 能量阈值，初始能量的20%
 
-def run_experiment(env_type='advanced'):
+def run_experiment(config: ExperimentConfig):
     """
     运行完整实验并报告结果。
     """
-    print(f"启动实验 - 网格大小: {GRID_WIDTH}x{GRID_HEIGHT}, 回合数: {NUM_EPISODES}")
-    print(f"初始能量: {INIT_ENERGY}, 能量阈值: {ENERGY_THRESHOLD}")
+    print(f"启动实验 - 网格大小: {config.environment.width}x{config.environment.height}, 回合数: {config.experiment['max_episodes']}")
+    print(f"初始能量: {config.agent.initial_energy}, 能量阈值: {config.agent.energy_threshold}")
     
     # 创建环境和智能体
-    if env_type == 'simple':
-        env = SimpleEnvironment(width=GRID_WIDTH, height=GRID_HEIGHT)
-    elif env_type == 'medium':
-        env = MediumEnvironment(width=GRID_WIDTH, height=GRID_HEIGHT)
+    if config.environment.type == EnvironmentType.SIMPLE:
+        env = SimpleEnvironment(width=config.environment.width, height=config.environment.height)
+    elif config.environment.type == EnvironmentType.MEDIUM:
+        env = MediumEnvironment(width=config.environment.width, height=config.environment.height)
     else:
-        env = AdvancedEnvironment(width=GRID_WIDTH, height=GRID_HEIGHT)
+        env = AdvancedEnvironment(
+            width=config.environment.width,
+            height=config.environment.height,
+            obstacle_density=config.environment.obstacle_density,
+            num_predators=config.environment.num_predators,
+            num_moving_obstacles=config.environment.num_moving_obstacles
+        )
     
     baseline_agent = BaselineAgent(env, name="BaselineAgent")
     energy_agent = EnergyAgent(env, 
-                              init_energy=INIT_ENERGY, 
-                              threshold=ENERGY_THRESHOLD, 
+                              init_energy=config.agent.initial_energy, 
+                              threshold=config.agent.energy_threshold, 
                               name="EnergyAgent")
     
-    # 创建指标记录器
+    # 创建指标记录器和评估器
     metrics_recorder = MetricsRecorder()
+    evaluator = ExperimentEvaluator(config.to_dict())
     
     # 测试两种智能体
     agents = [baseline_agent, energy_agent]
@@ -54,7 +67,7 @@ def run_experiment(env_type='advanced'):
     for agent in agents:
         print(f"\n开始测试智能体: {agent.name}")
         
-        for episode in range(NUM_EPISODES):
+        for episode in range(config.experiment['max_episodes']):
             # 重置环境和智能体
             state = env.reset()
             agent.reset()
@@ -64,21 +77,15 @@ def run_experiment(env_type='advanced'):
             steps = 0
             is_success = False
             energy_exhausted_flag = False
+            total_reward = 0
             
             # 运行单个回合
-            while not done and steps < MAX_STEPS_PER_EPISODE:
-                # --- 八阶段闭环 ---
-                # [阶段 8 -> 1: 动作 -> 能量] (EnergyAgent内部处理)
-                # [阶段 1 -> 2: 能量/环境状态 -> 信号]
-                # [阶段 2 -> 3: 信号 -> 数据] (Agent.perceive)
-                # [阶段 3 -> 4: 数据 -> 信息] (AttentionModule.compute_attention)
-                # [阶段 4 -> 7: 信息 -> 知识 -> 智慧 -> 决策] (Agent.decide)
-                # [阶段 7 -> 8: 决策 -> 动作] (env.step)
-                
+            while not done and steps < config.experiment['max_steps_per_episode']:
                 # 执行一步
                 next_state, reward, done, info = env.step(agent.act(state))
                 state = next_state
                 steps += 1
+                total_reward += reward
                 
                 # 检查结束条件
                 if done:
@@ -91,7 +98,7 @@ def run_experiment(env_type='advanced'):
                         is_success = False
             
             # 检查是否超时
-            if not done and steps >= MAX_STEPS_PER_EPISODE:
+            if not done and steps >= config.experiment['max_steps_per_episode']:
                 is_success = False
                 done = True
             
@@ -104,13 +111,45 @@ def run_experiment(env_type='advanced'):
                 agent_name=agent.name,
                 success=is_success,
                 steps=steps,
+                reward=total_reward,
                 energy_left=energy_left,
                 energy_exhausted=energy_exhausted_flag
             )
             
+            # 更新评估器
+            perception_level = 0
+            decision_level = 0
+            attention_level = 0
+            
+            # 获取智能体能力等级
+            if hasattr(agent, 'perception') and agent.perception:
+                perception_level = agent.perception.level if hasattr(agent.perception, 'level') else 0
+                
+            if hasattr(agent, 'decision') and agent.decision:
+                decision_level = agent.decision.level if hasattr(agent.decision, 'level') else 0
+                
+            if hasattr(agent, 'attention') and agent.attention:
+                attention_level = agent.attention.get_attention_level() if hasattr(agent.attention, 'get_attention_level') else 0
+            
+            evaluator.update_episode({
+                'total_reward': total_reward,
+                'success': is_success,
+                'survival_time': steps,
+                'avg_energy': energy_left if not np.isnan(energy_left) else 0,
+                'avg_attention': attention_level,
+                'avg_perception': perception_level,
+                'avg_decision': decision_level
+            })
+            
             # 定期打印进度
-            if (episode + 1) % (NUM_EPISODES // 10) == 0 or episode == 0:
-                print(f"  完成 {episode + 1}/{NUM_EPISODES} 回合")
+            if config.experiment['max_episodes'] <= 10 or (episode + 1) % (max(1, config.experiment['max_episodes'] // 10)) == 0 or episode == 0:
+                print(f"  完成 {episode + 1}/{config.experiment['max_episodes']} 回合")
+                
+                # 评估进展
+                progress = evaluator.evaluate_progress()
+                print(f"  当前评估: 平均奖励={progress['avg_reward']:.2f}, 成功率={progress['success_rate']:.2f}")
+                if progress['evolution_status']['needs_evolution']:
+                    print(f"  检测到进化需求: {progress['evolution_status']['current_stage']}")
         
         print(f"智能体 {agent.name} 测试完成")
     
@@ -119,7 +158,7 @@ def run_experiment(env_type='advanced'):
     print(f"\n实验完成 - 总耗时: {total_time:.2f} 秒")
     
     # 汇总并显示结果
-    summary_df = metrics_recorder.summarize(plot=matplotlib_available)
+    summary_df = metrics_recorder.summarize(plot=config.experiment['visualization'])
     
     # 返回汇总数据，以便进一步分析
     return summary_df
@@ -138,24 +177,32 @@ def main():
     parser.add_argument('--save-interval', type=int, help='保存间隔')
     args = parser.parse_args()
     
-    # 创建实验实例
-    experiment = Experiment(args.config)
+    # 创建默认配置
+    config = ExperimentConfig()
+    
+    # 如果提供了配置文件，则加载
+    if args.config:
+        config = ExperimentConfig.load(args.config)
     
     # 更新配置
+    if args.env:
+        config.environment.type = EnvironmentType[args.env.upper()]
     if args.episodes:
-        experiment.config.set('experiment.max_episodes', args.episodes)
+        config.experiment['max_episodes'] = args.episodes
     if args.visualization:
-        experiment.config.set('experiment.visualization', True)
+        config.experiment['visualization'] = True
     if args.save_interval:
-        experiment.config.set('experiment.save_interval', args.save_interval)
+        config.experiment['save_interval'] = args.save_interval
         
     # 运行实验
     try:
-        run_experiment(env_type=args.env)
+        run_experiment(config)
     except KeyboardInterrupt:
         print("\n实验被中断")
     finally:
-        experiment.stop()
-        
+        # 保存最终配置
+        config.save('experiment_config.json')
+        print("实验配置已保存到 experiment_config.json")
+
 if __name__ == '__main__':
     main() 
