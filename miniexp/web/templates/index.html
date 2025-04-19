@@ -11,10 +11,47 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <!-- 自定义CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            overflow-x: hidden;
+        }
+        .main-container {
+            display: flex;
+            height: 100vh;
+            padding: 10px;
+            gap: 10px;
+        }
+        .control-panel {
+            width: 300px;
+            overflow-y: auto;
+        }
+        .visualization-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .grid-container {
+            height: 300px;
+        }
+        .cycle-container {
+            height: 300px;
+        }
+        .results-panel {
+            width: 300px;
+            overflow-y: auto;
+        }
+        .card {
+            margin-bottom: 10px;
+        }
+        .message-container {
+            height: 150px;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
+        <div class="container-fluid">
             <a class="navbar-brand" href="#">八阶段闭环实验</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -32,133 +69,126 @@
         </div>
     </nav>
 
-    <div class="container mt-4">
-        <div class="row">
-            <!-- 左侧控制面板 -->
-            <div class="col-md-3">
-                <div class="card mb-4">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="card-title mb-0">实验控制</h5>
-                    </div>
-                    <div class="card-body">
-                        <form id="experimentForm">
-                            <div class="mb-3">
-                                <label for="gridWidth" class="form-label">网格宽度</label>
-                                <input type="number" class="form-control" id="gridWidth" min="5" max="20" value="{{ config.grid_width }}">
-                            </div>
-                            <div class="mb-3">
-                                <label for="gridHeight" class="form-label">网格高度</label>
-                                <input type="number" class="form-control" id="gridHeight" min="5" max="20" value="{{ config.grid_height }}">
-                            </div>
-                            <div class="mb-3">
-                                <label for="episodes" class="form-label">每个智能体回合数</label>
-                                <input type="number" class="form-control" id="episodes" min="1" max="100" value="{{ config.episodes }}">
-                            </div>
-                            <div class="mb-3">
-                                <label for="maxSteps" class="form-label">最大步数</label>
-                                <input type="number" class="form-control" id="maxSteps" min="10" max="1000" value="{{ config.max_steps }}">
-                            </div>
-                            <div class="mb-3">
-                                <label for="initEnergy" class="form-label">初始能量</label>
-                                <input type="number" class="form-control" id="initEnergy" min="5" max="200" value="{{ config.init_energy }}">
-                            </div>
-                            <div class="mb-3">
-                                <label for="energyThreshold" class="form-label">能量阈值</label>
-                                <input type="number" class="form-control" id="energyThreshold" min="1" max="50" value="{{ config.energy_threshold }}">
-                            </div>
-                            <div class="mb-3">
-                                <label for="displayInterval" class="form-label">显示间隔 (秒)</label>
-                                <input type="number" class="form-control" id="displayInterval" min="0.1" max="2" step="0.1" value="{{ config.display_interval }}">
-                            </div>
-                            <button type="button" id="startButton" class="btn btn-success w-100 mb-2">
+    <div class="main-container">
+        <!-- 左侧控制面板 -->
+        <div class="control-panel">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">实验控制</h5>
+                </div>
+                <div class="card-body">
+                    <form id="experimentForm">
+                        <div class="mb-2">
+                            <label for="gridWidth" class="form-label">网格宽度</label>
+                            <input type="number" class="form-control form-control-sm" id="gridWidth" min="5" max="20" value="{{ config.grid_width }}">
+                        </div>
+                        <div class="mb-2">
+                            <label for="gridHeight" class="form-label">网格高度</label>
+                            <input type="number" class="form-control form-control-sm" id="gridHeight" min="5" max="20" value="{{ config.grid_height }}">
+                        </div>
+                        <div class="mb-2">
+                            <label for="episodes" class="form-label">每个智能体回合数</label>
+                            <input type="number" class="form-control form-control-sm" id="episodes" min="1" max="100" value="{{ config.episodes }}">
+                        </div>
+                        <div class="mb-2">
+                            <label for="maxSteps" class="form-label">最大步数</label>
+                            <input type="number" class="form-control form-control-sm" id="maxSteps" min="10" max="1000" value="{{ config.max_steps }}">
+                        </div>
+                        <div class="mb-2">
+                            <label for="initEnergy" class="form-label">初始能量</label>
+                            <input type="number" class="form-control form-control-sm" id="initEnergy" min="5" max="200" value="{{ config.init_energy }}">
+                        </div>
+                        <div class="mb-2">
+                            <label for="energyThreshold" class="form-label">能量阈值</label>
+                            <input type="number" class="form-control form-control-sm" id="energyThreshold" min="1" max="50" value="{{ config.energy_threshold }}">
+                        </div>
+                        <div class="mb-2">
+                            <label for="displayInterval" class="form-label">显示间隔 (秒)</label>
+                            <input type="number" class="form-control form-control-sm" id="displayInterval" min="0.1" max="2" step="0.1" value="{{ config.display_interval }}">
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="button" id="startButton" class="btn btn-success">
                                 <i class="bi bi-play-fill"></i> 开始实验
                             </button>
-                            <button type="button" id="stopButton" class="btn btn-danger w-100" disabled>
+                            <button type="button" id="stopButton" class="btn btn-danger" disabled>
                                 <i class="bi bi-stop-fill"></i> 停止实验
                             </button>
-                        </form>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header bg-info text-white">
-                        <h5 class="card-title mb-0">实时状态</h5>
-                    </div>
-                    <div class="card-body">
-                        <p><strong>当前智能体:</strong> <span id="currentAgent">-</span></p>
-                        <p><strong>回合:</strong> <span id="currentEpisode">0</span>/<span id="totalEpisodes">0</span></p>
-                        <p><strong>步数:</strong> <span id="currentStep">0</span></p>
-                        <div id="energyInfo" style="display:none;">
-                            <p><strong>剩余能量:</strong> <span id="currentEnergy">0</span></p>
-                            <p><strong>焦虑度:</strong> <span id="currentAnxiety">0</span></p>
-                            <div class="progress mb-3">
-                                <div id="energyBar" class="progress-bar bg-success" style="width: 100%"></div>
-                            </div>
-                            <div class="progress">
-                                <div id="anxietyBar" class="progress-bar bg-warning" style="width: 0%"></div>
-                            </div>
                         </div>
-                    </div>
+                    </form>
                 </div>
             </div>
             
-            <!-- 中间可视化区域 -->
-            <div class="col-md-6">
-                <div class="card mb-4">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="card-title mb-0">网格世界可视化</h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="gridWorld" class="grid-container"></div>
-                    </div>
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="card-title mb-0">实时状态</h5>
                 </div>
-                
-                <div class="card">
-                    <div class="card-header bg-secondary text-white">
-                        <h5 class="card-title mb-0">实验信息</h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="messageContainer" class="message-container"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- 右侧结果区域 -->
-            <div class="col-md-3">
-                <div class="card mb-4">
-                    <div class="card-header bg-warning text-dark">
-                        <h5 class="card-title mb-0">实验结果</h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="resultsContainer">
-                            <p class="text-center text-muted">实验结束后将显示结果</p>
+                <div class="card-body">
+                    <p class="mb-1"><strong>当前智能体:</strong> <span id="currentAgent">-</span></p>
+                    <p class="mb-1"><strong>回合:</strong> <span id="currentEpisode">0</span>/<span id="totalEpisodes">0</span></p>
+                    <p class="mb-1"><strong>步数:</strong> <span id="currentStep">0</span></p>
+                    <div id="energyInfo" style="display:none;">
+                        <p class="mb-1"><strong>剩余能量:</strong> <span id="currentEnergy">0</span></p>
+                        <p class="mb-1"><strong>焦虑度:</strong> <span id="currentAnxiety">0</span></p>
+                        <div class="progress mb-2" style="height: 10px;">
+                            <div id="energyBar" class="progress-bar bg-success" style="width: 100%"></div>
                         </div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header bg-danger text-white">
-                        <h5 class="card-title mb-0">对比图表</h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="resultsChart"></canvas>
+                        <div class="progress" style="height: 10px;">
+                            <div id="anxietyBar" class="progress-bar bg-warning" style="width: 0%"></div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-    
-    <!-- 添加八阶段序态循环可视化 -->
-    <div class="container mt-4">
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="card-title mb-0">八阶段序态循环可视化</h5>
+        
+        <!-- 中间可视化区域 -->
+        <div class="visualization-panel">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="card-title mb-0">网格世界可视化</h5>
+                </div>
+                <div class="card-body">
+                    <div id="gridWorld" class="grid-container"></div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="card-title mb-0">八阶段序态循环可视化</h5>
+                </div>
+                <div class="card-body">
+                    <div id="orderStateCycle" class="order-state-cycle"></div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="card-title mb-0">实验信息</h5>
+                </div>
+                <div class="card-body">
+                    <div id="messageContainer" class="message-container"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右侧结果区域 -->
+        <div class="results-panel">
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="card-title mb-0">实验结果</h5>
+                </div>
+                <div class="card-body">
+                    <div id="resultsContainer">
+                        <p class="text-center text-muted">实验结束后将显示结果</p>
                     </div>
-                    <div class="card-body">
-                        <div id="orderStateCycle" class="order-state-cycle"></div>
-                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="card-title mb-0">对比图表</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="resultsChart"></canvas>
                 </div>
             </div>
         </div>

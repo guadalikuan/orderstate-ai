@@ -2,11 +2,13 @@ import numpy as np
 import time
 import sys
 import os
+import argparse
 
 # 导入项目模块
 from miniexp.env import GridWorld
 from miniexp.agent import BaselineAgent, EnergyAgent
 from miniexp.metrics import MetricsRecorder, matplotlib_available
+from miniexp.experiment.experiment import Experiment
 
 # 实验参数
 GRID_WIDTH = 10
@@ -118,8 +120,38 @@ def run_experiment():
     # 返回汇总数据，以便进一步分析
     return summary_df
 
-# 主函数
-if __name__ == "__main__":
+def main():
+    """
+    主程序入口
+    """
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='运行智能体进化实验')
+    parser.add_argument('--config', type=str, help='配置文件路径')
+    parser.add_argument('--env', type=str, choices=['simple', 'medium', 'advanced'], 
+                       default='advanced', help='环境类型')
+    parser.add_argument('--episodes', type=int, help='实验周期数')
+    parser.add_argument('--visualization', action='store_true', help='启用可视化')
+    parser.add_argument('--save-interval', type=int, help='保存间隔')
+    args = parser.parse_args()
+    
+    # 创建实验实例
+    experiment = Experiment(args.config)
+    
+    # 更新配置
+    if args.episodes:
+        experiment.config.set('experiment.max_episodes', args.episodes)
+    if args.visualization:
+        experiment.config.set('experiment.visualization', True)
+    if args.save_interval:
+        experiment.config.set('experiment.save_interval', args.save_interval)
+        
     # 运行实验
-    results = run_experiment()
-    print("\n实验结束!") 
+    try:
+        experiment.run()
+    except KeyboardInterrupt:
+        print("\n实验被中断")
+    finally:
+        experiment.stop()
+        
+if __name__ == '__main__':
+    main() 

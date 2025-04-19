@@ -69,78 +69,90 @@ def index():
 # API：开始新实验
 @app.route('/api/start_experiment', methods=['POST'])
 def start_experiment():
-    global experiment_status
-    
-    # 如果已经有实验在运行，先停止
-    if experiment_status['running']:
-        stop_experiment()
-    
-    # 获取配置参数
-    config = request.json or default_config
-    grid_width = int(config.get('grid_width', default_config['grid_width']))
-    grid_height = int(config.get('grid_height', default_config['grid_height']))
-    episodes = int(config.get('episodes', default_config['episodes']))
-    max_steps = int(config.get('max_steps', default_config['max_steps']))
-    init_energy = float(config.get('init_energy', default_config['init_energy']))
-    energy_threshold = float(config.get('energy_threshold', default_config['energy_threshold']))
-    display_interval = float(config.get('display_interval', default_config['display_interval']))
-    
-    # 设置目标位置为右下角
-    target_pos = (grid_height - 1, grid_width - 1)
-    # 设置起始位置为左上角
-    start_pos = (0, 0)
-    
-    # 创建环境和智能体
-    env = GridWorld(width=grid_width, height=grid_height, 
-                    target_pos=target_pos, start_pos=start_pos)
-    
-    baseline_agent = BaselineAgent(env, name="BaselineAgent")
-    energy_agent = EnergyAgent(env, 
-                              init_energy=init_energy, 
-                              threshold=energy_threshold, 
-                              name="EnergyAgent")
-    
-    # 创建指标记录器
-    metrics_recorder = MetricsRecorder()
-    
-    # 更新实验状态
-    experiment_status['running'] = True
-    experiment_status['episode'] = 0
-    experiment_status['step'] = 0
-    experiment_status['total_episodes'] = episodes * 2  # 两个智能体
-    experiment_status['grid_width'] = grid_width
-    experiment_status['grid_height'] = grid_height
-    experiment_status['env'] = env
-    experiment_status['agents'] = {
-        'BaselineAgent': baseline_agent,
-        'EnergyAgent': energy_agent
-    }
-    experiment_status['metrics'] = metrics_recorder
-    experiment_status['current_state'] = start_pos
-    experiment_status['target_pos'] = target_pos
-    
-    # 在新线程中运行实验
-    experiment_status['thread'] = threading.Thread(
-        target=run_experiment_thread, 
-        args=(episodes, max_steps, display_interval)
-    )
-    experiment_status['thread'].daemon = True
-    experiment_status['thread'].start()
-    
-    return jsonify({
-        'status': 'success',
-        'message': '实验已开始',
-        'config': {
-            'grid_width': grid_width,
-            'grid_height': grid_height,
-            'episodes': episodes,
-            'max_steps': max_steps,
-            'init_energy': init_energy,
-            'energy_threshold': energy_threshold,
-            'target_pos': target_pos,
-            'start_pos': start_pos
+    try:
+        global experiment_status
+        
+        # 如果已经有实验在运行，先停止
+        if experiment_status['running']:
+            stop_experiment()
+        
+        # 获取配置参数
+        if not request.is_json:
+            return jsonify({
+                'status': 'error',
+                'message': '请求必须是JSON格式'
+            }), 400
+            
+        config = request.get_json() or default_config
+        grid_width = int(config.get('grid_width', default_config['grid_width']))
+        grid_height = int(config.get('grid_height', default_config['grid_height']))
+        episodes = int(config.get('episodes', default_config['episodes']))
+        max_steps = int(config.get('max_steps', default_config['max_steps']))
+        init_energy = float(config.get('init_energy', default_config['init_energy']))
+        energy_threshold = float(config.get('energy_threshold', default_config['energy_threshold']))
+        display_interval = float(config.get('display_interval', default_config['display_interval']))
+        
+        # 设置目标位置为右下角
+        target_pos = (grid_height - 1, grid_width - 1)
+        # 设置起始位置为左上角
+        start_pos = (0, 0)
+        
+        # 创建环境和智能体
+        env = GridWorld(width=grid_width, height=grid_height, 
+                        target_pos=target_pos, start_pos=start_pos)
+        
+        baseline_agent = BaselineAgent(env, name="BaselineAgent")
+        energy_agent = EnergyAgent(env, 
+                                  init_energy=init_energy, 
+                                  threshold=energy_threshold, 
+                                  name="EnergyAgent")
+        
+        # 创建指标记录器
+        metrics_recorder = MetricsRecorder()
+        
+        # 更新实验状态
+        experiment_status['running'] = True
+        experiment_status['episode'] = 0
+        experiment_status['step'] = 0
+        experiment_status['total_episodes'] = episodes * 2  # 两个智能体
+        experiment_status['grid_width'] = grid_width
+        experiment_status['grid_height'] = grid_height
+        experiment_status['env'] = env
+        experiment_status['agents'] = {
+            'BaselineAgent': baseline_agent,
+            'EnergyAgent': energy_agent
         }
-    })
+        experiment_status['metrics'] = metrics_recorder
+        experiment_status['current_state'] = start_pos
+        experiment_status['target_pos'] = target_pos
+        
+        # 在新线程中运行实验
+        experiment_status['thread'] = threading.Thread(
+            target=run_experiment_thread, 
+            args=(episodes, max_steps, display_interval)
+        )
+        experiment_status['thread'].daemon = True
+        experiment_status['thread'].start()
+        
+        return jsonify({
+            'status': 'success',
+            'message': '实验已开始',
+            'config': {
+                'grid_width': grid_width,
+                'grid_height': grid_height,
+                'episodes': episodes,
+                'max_steps': max_steps,
+                'init_energy': init_energy,
+                'energy_threshold': energy_threshold,
+                'target_pos': target_pos,
+                'start_pos': start_pos
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'启动实验时出错: {str(e)}'
+        }), 500
 
 # API：停止实验
 @app.route('/api/stop_experiment', methods=['POST'])
@@ -189,16 +201,25 @@ def get_experiment_results():
 # API：获取八阶段循环状态
 @app.route('/api/cycle_state', methods=['GET'])
 def get_cycle_state():
-    """获取当前八阶段循环状态"""
-    if experiment_status['running'] and experiment_status['current_agent']:
-        agent = experiment_status['agents'].get(experiment_status['current_agent'])
-        if agent and hasattr(agent, 'state_tracker'):
-            return jsonify({
-                "status": "success",
-                "current": agent.state_tracker.get_current_state(),
-                "history": agent.state_tracker.get_history(5)
-            })
-    return jsonify({"status": "error", "message": "无可用的循环数据"})
+    try:
+        """获取当前八阶段循环状态"""
+        if experiment_status['running'] and experiment_status['current_agent']:
+            agent = experiment_status['agents'].get(experiment_status['current_agent'])
+            if agent and hasattr(agent, 'state_tracker'):
+                return jsonify({
+                    "status": "success",
+                    "current": agent.state_tracker.get_current_state(),
+                    "history": agent.state_tracker.get_history(5)
+                })
+        return jsonify({
+            "status": "error",
+            "message": "无可用的循环数据"
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"获取循环状态时出错: {str(e)}"
+        }), 500
 
 # Socket.IO：当客户端连接时
 @socketio.on('connect')

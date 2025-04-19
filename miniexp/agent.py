@@ -14,6 +14,7 @@ from miniexp.modules.wisdom import WisdomModule
 from miniexp.modules.decision import DecisionModule
 from miniexp.modules.action import ActionModule
 from miniexp.orderstate import OrderStateManager
+from miniexp.modules.attention import AttentionModule
 
 class StateTracker:
     """
@@ -40,6 +41,24 @@ class StateTracker:
         self.current_stage = None
         
         # 完整循环计数
+        self.cycle_count = 0
+    
+    def reset(self):
+        """
+        重置状态追踪器到初始状态
+        """
+        # 重置所有阶段的状态
+        for stage in self.states:
+            self.states[stage]['value'] = None
+            self.states[stage]['timestamp'] = None
+        
+        # 清空历史记录
+        self.history = []
+        
+        # 重置当前阶段
+        self.current_stage = None
+        
+        # 重置循环计数
         self.cycle_count = 0
     
     def update_state(self, stage: str, value: Any):
@@ -102,6 +121,14 @@ class BaseAgent(ABC):
         self.env = env
         self.name = name
         
+        # 初始化注意力模块
+        self.attention = AttentionModule(
+            perception_capacity=20,  # 感知容量
+            decision_capacity=10,    # 决策容量
+            anxiety_influence_rate=0.0,  # 默认不考虑焦虑
+            recovery_rate=0.2
+        )
+        
     @abstractmethod
     def perceive(self, state: Tuple[int, int]) -> np.ndarray:
         """
@@ -162,13 +189,11 @@ class BaselineAgent(BaseAgent):
         """
         super().__init__(env, name)
         
-        # 创建注意力模块
-        self.attention = AttentionModule(
-            perception_capacity=20,  # 感知容量
-            decision_capacity=10,    # 决策容量
-            anxiety_influence_rate=0.0,  # 基线智能体不考虑焦虑
-            recovery_rate=0.2
-        )
+        # 配置注意力模块参数
+        self.attention.perception_capacity = 20  # 感知容量
+        self.attention.decision_capacity = 10    # 决策容量
+        self.attention.anxiety_influence_rate = 0.0  # 基线智能体不考虑焦虑
+        self.attention.recovery_rate = 0.2
         
         # 创建状态追踪器
         self.state_tracker = StateTracker()
@@ -345,13 +370,11 @@ class EnergyAgent(BaseAgent):
         """
         super().__init__(env, name)
         
-        # 创建注意力模块
-        self.attention = AttentionModule(
-            perception_capacity=20,  # 感知容量
-            decision_capacity=10,    # 决策容量
-            anxiety_influence_rate=1.5,  # 焦虑对注意力的影响率
-            recovery_rate=0.1
-        )
+        # 配置注意力模块参数
+        self.attention.perception_capacity = 20  # 感知容量
+        self.attention.decision_capacity = 10    # 决策容量
+        self.attention.anxiety_influence_rate = 1.5  # 焦虑对注意力的影响率
+        self.attention.recovery_rate = 0.1
         
         # 创建能量模块
         self.energy_module = EnergyModule(
