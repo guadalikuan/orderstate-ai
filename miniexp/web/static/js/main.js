@@ -197,11 +197,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 更新状态信息
     function updateStatusInfo(data) {
-        currentAgentEl.textContent = data.agent_name;
+        currentAgentEl.textContent = data.agent_name || data.agent;
         currentStepEl.textContent = data.step;
         
         // 如果是EnergyAgent，显示能量信息
-        if (data.agent_name === 'EnergyAgent' && data.energy !== undefined) {
+        if ((data.agent_name === 'EnergyAgent' || data.agent === 'EnergyAgent') && data.energy !== undefined) {
             energyInfoEl.style.display = 'block';
             currentEnergyEl.textContent = data.energy.toFixed(1);
             energyBarEl.style.width = `${(data.energy / 100) * 100}%`;
@@ -225,10 +225,15 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch('/api/cycle_state')
             .then(response => response.json())
             .then(data => {
-                if (cycleVisualizer && data) {
-                    // 将数据转换为可视化器需要的格式
+                if (data.status === 'success') {
+                    // 更新循环可视化
+                    if (cycleVisualizer) {
+                        cycleVisualizer.updateState(data.current);
+                    }
+                } else if (cycleVisualizer && data) {
+                    // 兼容旧格式：将数据转换为可视化器需要的格式
                     const cycleData = {};
-                    for (const [stage, stateObj] of Object.entries(data.states)) {
+                    for (const [stage, stateObj] of Object.entries(data.states || {})) {
                         cycleData[stage] = {
                             value: stateObj.value
                         };
@@ -474,6 +479,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // 实验控制按钮事件监听
         startButton.addEventListener('click', handleStartExperiment);
         stopButton.addEventListener('click', handleStopExperiment);
+        
+        // 添加表单字段验证
+        document.querySelectorAll('#experimentForm input').forEach(input => {
+            input.addEventListener('change', function() {
+                if (this.id === 'gridWidth' || this.id === 'gridHeight') {
+                    initializeGridWorld();
+                }
+            });
+        });
         
         // 初始禁用停止按钮
         stopButton.disabled = true;

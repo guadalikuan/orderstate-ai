@@ -1,6 +1,8 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Tuple, List, Optional
+import time
+import copy
 
 from miniexp.env import GridWorld
 from miniexp.modules.energy import EnergyModule
@@ -15,493 +17,591 @@ from miniexp.orderstate import OrderStateManager
 
 class StateTracker:
     """
-    状态跟踪器，用于记录八阶段状态
+    状态追踪器：记录八阶段序态循环的状态变化
     """
     
     def __init__(self):
-        """
-        初始化状态跟踪器
-        """
-        # 默认使用全局OrderStateManager
-        from miniexp.orderstate import order_state_manager
-        self.order_state_manager = order_state_manager
+        # 存储八个阶段的当前状态
+        self.states = {
+            'energy': {'value': None, 'timestamp': None},
+            'signal': {'value': None, 'timestamp': None},
+            'data': {'value': None, 'timestamp': None},
+            'information': {'value': None, 'timestamp': None},
+            'knowledge': {'value': None, 'timestamp': None},
+            'wisdom': {'value': None, 'timestamp': None},
+            'decision': {'value': None, 'timestamp': None},
+            'action': {'value': None, 'timestamp': None}
+        }
+        
+        # 存储历史状态变化
+        self.history = []
+        
+        # 当前活跃阶段
+        self.current_stage = None
+        
+        # 完整循环计数
+        self.cycle_count = 0
     
     def update_state(self, stage: str, value: Any):
-        """
-        更新指定阶段的状态
+        """更新指定阶段的状态"""
+        if stage not in self.states:
+            raise ValueError(f"未知阶段: {stage}")
+            
+        self.states[stage]['value'] = value
+        self.states[stage]['timestamp'] = time.time()
+        self.current_stage = stage
         
-        Args:
-            stage: 阶段名称
-            value: 状态值
-        """
-        self.order_state_manager.update_state(stage, value)
-    
+        # 记录历史
+        self.history.append({
+            'stage': stage,
+            'value': value,
+            'timestamp': time.time()
+        })
+        
+        # 检查是否完成一个循环
+        if stage == 'action':
+            self.complete_cycle()
+            
     def complete_cycle(self):
-        """
-        完成一个周期
-        """
-        # 在OrderStateManager中此功能已自动处理
-        pass
+        """完成一个完整的八阶段循环"""
+        # 检查是否所有阶段都有值
+        if all(self.states[stage]['value'] is not None for stage in self.states):
+            self.cycle_count += 1
+            print(f"完成第 {self.cycle_count} 个序态循环")
+            
+            # 这里可以添加完成循环后的回调或其他处理
     
     def get_current_state(self) -> Dict[str, Any]:
-        """
-        获取当前状态
-        
-        Returns:
-            Dict: 当前状态
-        """
-        return self.order_state_manager.get_current_state()
+        """获取当前所有阶段的状态"""
+        result = {
+            'current': {stage: {'value': self.states[stage]['value']} 
+                      for stage in self.states},
+            'current_stage': self.current_stage,
+            'cycle_count': self.cycle_count,
+            'status': 'success'
+        }
+        return result
     
     def get_history(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """
-        获取历史记录
-        
-        Args:
-            limit: 最大记录数，默认为10
-            
-        Returns:
-            List[Dict]: 历史记录
-        """
-        return self.order_state_manager.get_history(limit)
+        """获取历史状态记录"""
+        return self.history[-limit:]
 
 class BaseAgent(ABC):
     """
-    智能体基类，定义了智能体的基本接口。
+    基础智能体抽象类。
+    定义了所有智能体必须实现的基本接口。
     """
-    
     def __init__(self, env: GridWorld, name: str = "BaseAgent"):
         """
-        初始化智能体。
-        
+        初始化基础智能体。
+
         Args:
             env (GridWorld): 环境实例。
-            name (str): 智能体名称。
+            name (str, optional): 智能体名称。
         """
         self.env = env
         self.name = name
-        self.state_tracker = StateTracker()
-    
+        
     @abstractmethod
     def perceive(self, state: Tuple[int, int]) -> np.ndarray:
         """
-        感知环境状态，提取特征。
-        
+        感知环境状态，返回特征向量。
+
         Args:
-            state (Tuple[int, int]): 环境状态，通常是智能体的位置坐标。
-            
+            state (Tuple[int, int]): 当前状态 (行, 列)。
+
         Returns:
-            np.ndarray: 提取的特征向量。
+            np.ndarray: 特征向量。
         """
         pass
-    
+
     @abstractmethod
     def decide(self, features: np.ndarray) -> int:
         """
-        根据特征向量做出决策。
-        
+        基于特征向量决策下一步动作。
+
         Args:
             features (np.ndarray): 特征向量。
-            
+
         Returns:
-            int: 决策的动作。
+            int: 所选动作。
         """
         pass
-    
+
     @abstractmethod
     def step(self, state: Tuple[int, int]) -> Tuple[Tuple[int, int], float, bool]:
         """
         执行一步交互。
-        
+
         Args:
-            state (Tuple[int, int]): 当前状态。
-            
+            state (Tuple[int, int]): 当前状态 (行, 列)。
+
         Returns:
             Tuple[Tuple[int, int], float, bool]: (下一个状态, 奖励, 是否结束)。
         """
         pass
-    
+
     @abstractmethod
     def reset(self):
         """
-        重置智能体的状态。
+        重置智能体状态。
         """
         pass
 
 class BaselineAgent(BaseAgent):
     """
-    基线智能体，简单地使用注意力机制而不考虑能量管理。
+    基线智能体实现。使用注意力机制但不考虑能量管理。
     """
-    
     def __init__(self, env: GridWorld, name: str = "BaselineAgent"):
         """
         初始化基线智能体。
-        
+
         Args:
-            env (GridWorld): 环境实例。
-            name (str): 智能体名称。
+            env (GridWorld): 环境实例
+            name (str, optional): 智能体名称
         """
         super().__init__(env, name)
         
-        # 使用注意力模块
-        from miniexp.modules.attention import AttentionModule
-        self.attention = AttentionModule()
+        # 创建注意力模块
+        self.attention = AttentionModule(
+            perception_capacity=20,  # 感知容量
+            decision_capacity=10,    # 决策容量
+            anxiety_influence_rate=0.0,  # 基线智能体不考虑焦虑
+            recovery_rate=0.2
+        )
         
-        # 创建各阶段模块
-        self.signal_module = SignalModule()
-        self.data_module = DataModule()
-        self.information_module = InformationModule()
-        self.knowledge_module = KnowledgeModule()
-        self.wisdom_module = WisdomModule()
-        self.decision_module = DecisionModule()
-        self.action_module = ActionModule()
-    
+        # 创建状态追踪器
+        self.state_tracker = StateTracker()
+        
+        # 序态循环当前阶段
+        self.current_stage = None
+        
+        print(f"创建基线智能体: {name}")
+
     def perceive(self, state: Tuple[int, int]) -> np.ndarray:
         """
-        感知环境状态，提取特征。
-        
+        感知环境状态，返回特征向量。
+
         Args:
-            state (Tuple[int, int]): 环境状态，通常是智能体的位置坐标。
-            
+            state (Tuple[int, int]): 当前状态 (行, 列)。
+
         Returns:
-            np.ndarray: 提取的特征向量。
+            np.ndarray: 特征向量。
         """
-        # [阶段 1->2: 能量/环境状态 -> 信号]
-        # 基线智能体不使用能量阶段，直接从信号开始
-        signal_data = self.signal_module.process_environment_signal(
-            env_state=state,
-            target_pos=self.env.target_pos,
-            energy_level=100.0  # 固定能量水平
-        )
-        self.state_tracker.update_state('signal', signal_data)
+        # [阶段 2 -> 3: 信号 -> 数据]
+        self.current_stage = 'signal'
+        signal_value = {
+            'agent_pos': state,
+            'target_pos': self.env.target_pos
+        }
+        self.state_tracker.update_state('signal', signal_value)
         
-        # [阶段 2->3: 信号 -> 数据]
-        features = self.data_module.extract_features(
-            signal_data=signal_data,
-            grid_size=(self.env.height, self.env.width)
-        )
-        self.state_tracker.update_state('data', features)
+        # 提取原始特征
+        # 1-2: 智能体位置(归一化)
+        # 3-4: 目标位置(归一化)
+        # 5: 与目标的距离(曼哈顿距离)
+        r, c = state
+        tr, tc = self.env.target_pos
+        
+        # 提取原始特征
+        raw_features = np.array([
+            r / max(1, self.env.height - 1),  # 行归一化
+            c / max(1, self.env.width - 1),   # 列归一化
+            tr / max(1, self.env.height - 1), # 目标行归一化
+            tc / max(1, self.env.width - 1),  # 目标列归一化
+            abs(r - tr) + abs(c - tc)        # 曼哈顿距离
+        ])
+        
+        # 记录数据阶段
+        self.current_stage = 'data'
+        data_value = {'raw_features': raw_features.tolist()}
+        self.state_tracker.update_state('data', data_value)
+        
+        # [阶段 3 -> 4: 数据 -> 信息]
+        # 通过注意力模块过滤感知
+        features = self.attention.filter_perception(raw_features, state)
+        
+        # 记录信息阶段
+        self.current_stage = 'information'
+        info_value = {'filtered_features': features.tolist()}
+        self.state_tracker.update_state('information', info_value)
         
         return features
-    
+
     def decide(self, features: np.ndarray) -> int:
         """
-        根据特征向量做出决策。
-        
+        基于特征向量决策下一步动作。
+
         Args:
             features (np.ndarray): 特征向量。
-            
+
         Returns:
-            int: 决策的动作。
+            int: 所选动作。
         """
-        # [阶段 3->4: 数据 -> 信息]
-        # 使用注意力机制处理特征，但不考虑焦虑影响
-        attention_state = self.attention.update(anxiety=0.0, reward=0.0)
-        weighted_features = self.attention.filter_perception(features, self.env.agent_pos)
+        # [阶段 4 -> 5/6/7: 信息 -> 知识/智慧/决策]
         
-        information_data = self.information_module.process_data(
-            features=features, 
-            anxiety=0.0,  # 基线智能体没有焦虑
-            raw_data={"attention_state": attention_state}
-        )
-        self.state_tracker.update_state('information', information_data)
+        # 根据特征计算每个动作的值
+        action_values = np.zeros(4)  # 上、下、左、右
         
-        # [阶段 4->5: 信息 -> 知识]
-        knowledge_data = self.knowledge_module.process_information(
-            information_data=information_data,
-            current_position=self.env.agent_pos,
-            target_position=self.env.target_pos,
-            grid_size=(self.env.height, self.env.width)
-        )
-        self.state_tracker.update_state('knowledge', knowledge_data)
+        # 当前位置在特征向量中的索引
+        r_norm = features[0]  # 归一化后的行
+        c_norm = features[1]  # 归一化后的列
+        tr_norm = features[2]  # 归一化后的目标行
+        tc_norm = features[3]  # 归一化后的目标列
         
-        # [阶段 5->6: 知识 -> 智慧]
-        wisdom_data = self.wisdom_module.process_knowledge(
-            knowledge_data=knowledge_data,
-            anxiety=0.0,
-            energy_level=100.0  # 固定能量水平
-        )
-        self.state_tracker.update_state('wisdom', wisdom_data)
+        # 简单启发式：向目标方向移动有更高的值
+        r_diff = tr_norm - r_norm
+        c_diff = tc_norm - c_norm
         
-        # [阶段 6->7: 智慧 -> 决策]
-        action = self.decision_module.make_decision(wisdom_data)
-        self.state_tracker.update_state('decision', action)
+        # 计算动作值
+        # 上(0)
+        action_values[0] = 0.5 if r_diff < 0 else -0.5
+        # 下(1)
+        action_values[1] = 0.5 if r_diff > 0 else -0.5
+        # 左(2)
+        action_values[2] = 0.5 if c_diff < 0 else -0.5
+        # 右(3)
+        action_values[3] = 0.5 if c_diff > 0 else -0.5
+        
+        # 记录知识阶段
+        self.current_stage = 'knowledge'
+        knowledge_value = {'action_values': action_values.tolist()}
+        self.state_tracker.update_state('knowledge', knowledge_value)
+        
+        # 使用注意力过滤决策
+        # 基线智能体焦虑度始终为0
+        anxiety = 0.0
+        filtered_values = self.attention.filter_action_values(action_values, anxiety)
+        
+        # 记录智慧阶段
+        self.current_stage = 'wisdom' 
+        wisdom_value = {'filtered_values': filtered_values.tolist()}
+        self.state_tracker.update_state('wisdom', wisdom_value)
+        
+        # 选择值最高的动作
+        action = np.argmax(filtered_values)
+        
+        # 记录决策阶段
+        self.current_stage = 'decision'
+        decision_value = {'selected_action': int(action)}
+        self.state_tracker.update_state('decision', decision_value)
         
         return action
-    
+
     def step(self, state: Tuple[int, int]) -> Tuple[Tuple[int, int], float, bool]:
         """
         执行一步交互。
-        
+
         Args:
-            state (Tuple[int, int]): 当前状态。
-            
+            state (Tuple[int, int]): 当前状态 (行, 列)。
+
         Returns:
             Tuple[Tuple[int, int], float, bool]: (下一个状态, 奖励, 是否结束)。
         """
-        # [阶段 2->3->4: 信号->数据->信息] + [阶段 4->5->6->7: 信息->知识->智慧->决策]
+        # [完整的八阶段闭环]
+        
+        # 感知并决策
         features = self.perceive(state)
         action = self.decide(features)
         
-        # [阶段 7->8: 决策 -> 动作]
-        action_result = self.action_module.execute_action(
-            action=action,
-            env=self.env,
-            anxiety=0.0  # 基线智能体没有焦虑
-        )
-        self.state_tracker.update_state('action', action_result)
+        # [阶段 7 -> 8: 决策 -> 动作]
+        # 执行选择的动作
+        next_state, reward, done = self.env.step(action)
         
-        # 从执行结果中获取下一状态、奖励和是否结束
-        next_state = action_result["next_state"]
-        reward = action_result["reward"]
-        done = action_result["done"]
+        # 记录动作阶段
+        self.current_stage = 'action'
+        action_value = {
+            'action_taken': int(action),
+            'next_state': next_state,
+            'reward': float(reward)
+        }
+        self.state_tracker.update_state('action', action_value)
         
-        # 基线智能体没有能量消耗，所以不用处理 action->energy 阶段
+        # 更新注意力模块
+        self.attention.update(0.0, reward)  # 基线智能体焦虑度始终为0
         
         return next_state, reward, done
-    
+
     def reset(self):
         """
-        重置智能体的状态。
+        重置智能体状态。
         """
         self.attention.reset()
-        
-        # 重置各阶段模块
-        self.signal_module.reset()
-        self.data_module.reset()
-        self.information_module.reset()
-        self.knowledge_module.reset()
-        self.wisdom_module.reset()
-        self.decision_module.reset()
-        self.action_module.reset()
+        self.state_tracker.reset()
 
 class EnergyAgent(BaseAgent):
     """
-    能量智能体，考虑能量管理，生存焦虑会影响注意力分配。
+    能量智能体实现。使用注意力机制并考虑能量管理。
     """
-    
     def __init__(self, env: GridWorld, init_energy: float, threshold: float, name: str = "EnergyAgent"):
         """
         初始化能量智能体。
-        
+
         Args:
-            env (GridWorld): 环境实例。
-            init_energy (float): 初始能量。
-            threshold (float): 能量阈值，低于此值会产生焦虑。
-            name (str): 智能体名称。
+            env (GridWorld): 环境实例
+            init_energy (float): 初始能量值
+            threshold (float): 能量阈值，低于此值会产生焦虑
+            name (str, optional): 智能体名称
         """
         super().__init__(env, name)
         
-        # 初始化能量模块
+        # 创建注意力模块
+        self.attention = AttentionModule(
+            perception_capacity=20,  # 感知容量
+            decision_capacity=10,    # 决策容量
+            anxiety_influence_rate=1.5,  # 焦虑对注意力的影响率
+            recovery_rate=0.1
+        )
+        
+        # 创建能量模块
         self.energy_module = EnergyModule(
             initial_energy=init_energy,
             max_energy=init_energy,
             min_energy=0.0,
-            energy_decay_rate=0.5,
-            energy_recovery_rate=2.0,
-            anxiety_threshold=threshold
+            energy_decay_rate=0.5,   # 能量衰减率
+            energy_recovery_rate=0.2,  # 能量恢复率
+            anxiety_threshold=threshold,  # 焦虑阈值
+            anxiety_sensitivity=2.0,  # 焦虑敏感度
+            anxiety_recovery_rate=0.1  # 焦虑恢复率
         )
         
-        # 初始化注意力模块
-        from miniexp.modules.attention import AttentionModule
-        self.attention = AttentionModule()
+        # 创建状态追踪器
+        self.state_tracker = StateTracker()
         
-        # 创建各阶段模块
-        self.signal_module = SignalModule()
-        self.data_module = DataModule()
-        self.information_module = InformationModule()
-        self.knowledge_module = KnowledgeModule()
-        self.wisdom_module = WisdomModule()
-        self.decision_module = DecisionModule()
-        self.action_module = ActionModule()
-    
+        # 序态循环当前阶段
+        self.current_stage = None
+        
+        print(f"创建能量智能体: {name}, 初始能量: {init_energy}, 阈值: {threshold}")
+
     def perceive(self, state: Tuple[int, int]) -> np.ndarray:
         """
-        感知环境状态，提取特征。考虑能量的影响。
-        
+        感知环境状态，返回特征向量。
+
         Args:
-            state (Tuple[int, int]): 环境状态，通常是智能体的位置坐标。
-            
+            state (Tuple[int, int]): 当前状态 (行, 列)。
+
         Returns:
-            np.ndarray: 提取的特征向量。
+            np.ndarray: 特征向量。
         """
-        # 首先更新能量状态，以便传递到信号模块
-        # [阶段 8->1: 动作 -> 能量]
-        energy_state = self.energy_module.get_metrics()
-        self.state_tracker.update_state('energy', energy_state["current_energy"])
+        # [阶段 1 -> 2: 能量 -> 信号]
+        # 更新并记录能量阶段
+        self.current_stage = 'energy'
+        energy_value = {
+            'energy': float(self.energy_module.energy),
+            'anxiety': float(self.energy_module.anxiety)
+        }
+        self.state_tracker.update_state('energy', energy_value)
         
-        # [阶段 1->2: 能量/环境状态 -> 信号]
-        signal_data = self.signal_module.process_environment_signal(
-            env_state=state,
-            target_pos=self.env.target_pos,
-            energy_level=energy_state["current_energy"]
-        )
-        self.state_tracker.update_state('signal', signal_data)
+        # [阶段 2 -> 3: 信号 -> 数据]
+        self.current_stage = 'signal'
+        signal_value = {
+            'agent_pos': state,
+            'target_pos': self.env.target_pos
+        }
+        self.state_tracker.update_state('signal', signal_value)
         
-        # [阶段 2->3: 信号 -> 数据]
-        # 提取特征，并将能量相关特征添加到特征向量中
-        features = self.data_module.extract_features(
-            signal_data=signal_data,
-            grid_size=(self.env.height, self.env.width)
-        )
+        # 提取原始特征
+        # 1-2: 智能体位置(归一化)
+        # 3-4: 目标位置(归一化)
+        # 5: 与目标的距离(曼哈顿距离)
+        # 6: 当前能量水平(归一化)
+        # 7: 当前焦虑水平
+        r, c = state
+        tr, tc = self.env.target_pos
         
-        # 将能量模块的状态特征合并到感知特征中
-        energy_features = self.energy_module.get_state_features()
+        raw_features = np.array([
+            r / max(1, self.env.height - 1),  # 行归一化
+            c / max(1, self.env.width - 1),   # 列归一化
+            tr / max(1, self.env.height - 1), # 目标行归一化
+            tc / max(1, self.env.width - 1),  # 目标列归一化
+            abs(r - tr) + abs(c - tc),       # 曼哈顿距离
+            self.energy_module.energy / self.energy_module.max_energy,  # 能量归一化
+            self.energy_module.anxiety        # 焦虑水平
+        ])
         
-        # 合并特征（这里简单地将两个特征向量连接）
-        combined_features = np.hstack([features, energy_features])
+        # 记录数据阶段
+        self.current_stage = 'data'
+        data_value = {'raw_features': raw_features.tolist()}
+        self.state_tracker.update_state('data', data_value)
         
-        self.state_tracker.update_state('data', combined_features)
+        # [阶段 3 -> 4: 数据 -> 信息]
+        # 通过注意力模块过滤感知，考虑焦虑影响
+        features = self.attention.filter_perception(raw_features, state)
         
-        return combined_features
-    
+        # 记录信息阶段
+        self.current_stage = 'information'
+        info_value = {'filtered_features': features.tolist()}
+        self.state_tracker.update_state('information', info_value)
+        
+        return features
+
     def decide(self, features: np.ndarray) -> int:
         """
-        根据特征向量做出决策。考虑焦虑对注意力的影响。
-        
+        基于特征向量决策下一步动作，考虑能量因素。
+
         Args:
             features (np.ndarray): 特征向量。
-            
+
         Returns:
-            int: 决策的动作。
+            int: 所选动作。
         """
-        # 获取当前焦虑水平
+        # [阶段 4 -> 5/6/7: 信息 -> 知识/智慧/决策]
+        
+        # 根据特征计算每个动作的值
+        action_values = np.zeros(4)  # 上、下、左、右
+        
+        # 解析特征
+        r_norm = features[0]  # 归一化后的行
+        c_norm = features[1]  # 归一化后的列
+        tr_norm = features[2]  # 归一化后的目标行
+        tc_norm = features[3]  # 归一化后的目标列
+        energy_norm = features[5] if len(features) > 5 else 1.0  # 归一化后的能量
+        
+        # 计算动作值，考虑到目标和能量
+        r_diff = tr_norm - r_norm
+        c_diff = tc_norm - c_norm
+        
+        # 基本动作值
+        # 上(0)
+        action_values[0] = 0.5 if r_diff < 0 else -0.5
+        # 下(1)
+        action_values[1] = 0.5 if r_diff > 0 else -0.5
+        # 左(2)
+        action_values[2] = 0.5 if c_diff < 0 else -0.5
+        # 右(3)
+        action_values[3] = 0.5 if c_diff > 0 else -0.5
+        
+        # 记录知识阶段
+        self.current_stage = 'knowledge'
+        knowledge_value = {'action_values': action_values.tolist()}
+        self.state_tracker.update_state('knowledge', knowledge_value)
+        
+        # 应用能量优先级
+        survival_priority = self.energy_module.get_survival_priority()
+        adjusted_values = self.energy_module.compute_action_priority(action_values)
+        
+        # 使用注意力过滤决策，考虑焦虑影响
         anxiety = self.energy_module.anxiety
+        final_values = self.attention.filter_action_values(adjusted_values, anxiety)
         
-        # [阶段 3->4: 数据 -> 信息]
-        # 更新注意力状态，考虑焦虑的影响
-        attention_state = self.attention.update(anxiety=anxiety, reward=0.0)
+        # 记录智慧阶段
+        self.current_stage = 'wisdom'
+        wisdom_value = {
+            'raw_values': action_values.tolist(),
+            'energy_adjusted': adjusted_values.tolist(),
+            'final_values': final_values.tolist(),
+            'survival_priority': float(survival_priority)
+        }
+        self.state_tracker.update_state('wisdom', wisdom_value)
         
-        # 使用注意力过滤感知
-        weighted_features = self.attention.filter_perception(features, self.env.agent_pos)
+        # 选择值最高的动作
+        action = np.argmax(final_values)
         
-        information_data = self.information_module.process_data(
-            features=features, 
-            anxiety=anxiety,
-            raw_data={"attention_state": attention_state}
-        )
-        self.state_tracker.update_state('information', information_data)
-        
-        # [阶段 4->5: 信息 -> 知识]
-        knowledge_data = self.knowledge_module.process_information(
-            information_data=information_data,
-            current_position=self.env.agent_pos,
-            target_position=self.env.target_pos,
-            grid_size=(self.env.height, self.env.width)
-        )
-        self.state_tracker.update_state('knowledge', knowledge_data)
-        
-        # [阶段 5->6: 知识 -> 智慧]
-        wisdom_data = self.wisdom_module.process_knowledge(
-            knowledge_data=knowledge_data,
-            anxiety=anxiety,
-            energy_level=self.energy_module.energy
-        )
-        self.state_tracker.update_state('wisdom', wisdom_data)
-        
-        # [阶段 6->7: 智慧 -> 决策]
-        action = self.decision_module.make_decision(wisdom_data)
-        self.state_tracker.update_state('decision', action)
+        # 记录决策阶段
+        self.current_stage = 'decision'
+        decision_value = {'selected_action': int(action)}
+        self.state_tracker.update_state('decision', decision_value)
         
         return action
-    
+
     def step(self, state: Tuple[int, int]) -> Tuple[Tuple[int, int], float, bool]:
         """
-        执行一步交互。考虑能量消耗和焦虑影响。
-        
+        执行一步交互，考虑能量管理。
+
         Args:
-            state (Tuple[int, int]): 当前状态。
-            
+            state (Tuple[int, int]): 当前状态 (行, 列)。
+
         Returns:
-            Tuple[Tuple[int, int], float, bool]: (下一个状态, 奖励, 是否结束)。
+            Tuple[Tuple[int, int], float, bool]: (下一个状态, 奖励, 是否结束或能量耗尽)。
         """
-        # [阶段 2->3->4: 信号->数据->信息] + [阶段 4->5->6->7: 信息->知识->智慧->决策]
+        # 检查能量是否耗尽
+        if self.is_energy_exhausted():
+            return state, -1.0, True
+        
+        # 感知并决策
         features = self.perceive(state)
         action = self.decide(features)
         
-        # 获取当前焦虑水平
-        anxiety = self.energy_module.anxiety
+        # [阶段 7 -> 8: 决策 -> 动作]
+        # 执行选择的动作，消耗能量
+        next_state, reward, done = self.env.step(action)
         
-        # [阶段 7->8: 决策 -> 动作]
-        action_result = self.action_module.execute_action(
-            action=action,
-            env=self.env,
-            anxiety=anxiety
-        )
-        self.state_tracker.update_state('action', action_result)
+        # 记录动作阶段
+        self.current_stage = 'action'
+        action_value = {
+            'action_taken': int(action),
+            'next_state': next_state,
+            'reward': float(reward),
+            'energy_cost': 1.0  # 基本能量消耗
+        }
+        self.state_tracker.update_state('action', action_value)
         
-        # 从执行结果中获取下一状态、奖励和是否结束
-        next_state = action_result["next_state"]
-        reward = action_result["reward"]
-        done = action_result["done"]
+        # [阶段 8 -> 1: 动作 -> 能量]
+        # 更新能量和焦虑
+        self.energy_module.update(reward, action_cost=1.0)
         
-        # 更新能量状态，消耗动作成本
-        # [阶段 8->1: 动作 -> 能量]
-        energy_cost = action_result["energy_cost"]
-        energy_update = self.energy_module.update(reward=reward, action_cost=energy_cost)
+        # 更新注意力模块
+        self.attention.update(self.energy_module.anxiety, reward)
         
-        # 能量耗尽检查
+        # 检查是否能量耗尽
         if self.is_energy_exhausted():
-            done = True
-        
+            return next_state, -1.0, True
+            
         return next_state, reward, done
-    
+
     def reset(self):
         """
-        重置智能体的状态。
+        重置智能体状态。
         """
-        self.energy_module.reset()
         self.attention.reset()
-        
-        # 重置各阶段模块
-        self.signal_module.reset()
-        self.data_module.reset()
-        self.information_module.reset()
-        self.knowledge_module.reset()
-        self.wisdom_module.reset()
-        self.decision_module.reset()
-        self.action_module.reset()
-    
+        self.energy_module.reset()
+        self.state_tracker.reset()
+
     def get_remaining_energy(self) -> float:
         """
         获取剩余能量。
-        
+
         Returns:
             float: 剩余能量值。
         """
         return self.energy_module.energy
-    
+
     def is_energy_exhausted(self) -> bool:
         """
         检查能量是否耗尽。
-        
+
         Returns:
-            bool: 如果能量耗尽返回True，否则返回False。
+            bool: 如果能量耗尽则为True。
         """
         return self.energy_module.energy <= 0
 
 # 测试代码
-if __name__ == '__main__':
-    # 创建一个简单的网格世界环境
-    env = GridWorld(width=5, height=4, target_pos=(3, 4))
+if __name__ == "__main__":
+    # 创建环境和两种智能体
+    env = GridWorld(width=5, height=5, target_pos=(4, 4), start_pos=(0, 0))
     
-    # 测试BaselineAgent
-    print("测试 BaselineAgent:")
+    # 测试基线智能体
+    print("\n测试基线智能体:")
     baseline_agent = BaselineAgent(env)
     state = env.reset()
+    env.render()
+    
     done = False
     while not done:
         next_state, reward, done = baseline_agent.step(state)
-        print(f"状态: {state} -> {next_state}, 动作: {baseline_agent.decision_module.get_current_decision().get('action')}, 奖励: {reward}")
         state = next_state
-    print("完成!")
+        env.render()
+        print(f"奖励: {reward}, 完成: {done}")
     
-    # 测试EnergyAgent
-    print("\n测试 EnergyAgent:")
-    energy_agent = EnergyAgent(env, init_energy=10.0, threshold=3.0)
+    # 测试能量智能体
+    print("\n测试能量智能体:")
+    energy_agent = EnergyAgent(env, init_energy=20.0, threshold=5.0)
     state = env.reset()
+    env.render()
+    
     done = False
     while not done:
         next_state, reward, done = energy_agent.step(state)
-        print(f"状态: {state} -> {next_state}, 动作: {energy_agent.decision_module.get_current_decision().get('action')}, 奖励: {reward}, 能量: {energy_agent.get_remaining_energy():.1f}, 焦虑: {energy_agent.energy_module.anxiety:.2f}")
         state = next_state
-    print("完成!") 
+        env.render()
+        print(f"奖励: {reward}, 完成: {done}, 能量: {energy_agent.get_remaining_energy():.1f}, 焦虑: {energy_agent.energy_module.anxiety:.2f}") 
