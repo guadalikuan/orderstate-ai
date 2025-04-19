@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let resultsChart = null;
     let gridWidth = parseInt(document.getElementById('gridWidth').value);
     let gridHeight = parseInt(document.getElementById('gridHeight').value);
+    let cycleVisualizer = null;
+    let isRunning = false;
     
     // DOM元素
     const startButton = document.getElementById('startButton');
@@ -24,32 +26,61 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初始化Socket.IO连接
     function initializeSocket() {
-        // 连接到服务器
-        socket = io();
-        
-        // 服务器消息处理
-        socket.on('server_message', function(data) {
-            addMessage(data.message);
-        });
-        
-        // 状态更新处理
-        socket.on('state_update', function(data) {
-            updateGridWorld(data);
-            updateStatusInfo(data);
-        });
-        
-        // 实验完成处理
-        socket.on('experiment_complete', function(data) {
-            addMessage(data.message);
-            fetchResults();
-            updateUIState(false);
-        });
-        
-        // 连接断开处理
-        socket.on('disconnect', function() {
-            addMessage('与服务器的连接已断开');
-            updateUIState(false);
-        });
+        try {
+            console.log("尝试初始化Socket.IO连接...");
+            // 连接到服务器（强制使用WebSocket传输）
+            socket = io({
+                transports: ['websocket', 'polling'],
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000
+            });
+            
+            socket.on('connect', function() {
+                console.log("Socket.IO连接成功！Socket ID:", socket.id);
+                addMessage("已连接到服务器");
+            });
+            
+            socket.on('connect_error', function(error) {
+                console.error("Socket.IO连接错误:", error);
+                addMessage("连接服务器时出错: " + error);
+            });
+            
+            // 服务器消息处理
+            socket.on('server_message', function(data) {
+                console.log("收到服务器消息:", data);
+                addMessage(data.message);
+            });
+            
+            // 状态更新处理
+            socket.on('state_update', function(data) {
+                console.log("收到状态更新:", data);
+                updateGridWorld(data);
+                updateStatusInfo(data);
+            });
+            
+            // 实验完成处理
+            socket.on('experiment_complete', function(data) {
+                console.log("实验完成:", data);
+                addMessage(data.message);
+                fetchResults();
+                updateUIState(false);
+            });
+            
+            // 连接断开处理
+            socket.on('disconnect', function(reason) {
+                console.log("Socket.IO连接断开, 原因:", reason);
+                addMessage(`与服务器的连接已断开: ${reason}`);
+                updateUIState(false);
+            });
+            
+            // 调试用的事件，显示所有收到的事件
+            socket.onAny((event, ...args) => {
+                console.log(`收到事件 ${event}:`, args);
+            });
+        } catch (error) {
+            console.error("初始化Socket.IO连接时出错:", error);
+            addMessage("无法初始化Socket.IO连接: " + error);
+        }
     }
     
     // 初始化网格世界
@@ -92,6 +123,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 更新网格世界
     function updateGridWorld(data) {
+        console.log("收到状态更新:", data);
+        
         // 如果网格尺寸变化，重新初始化
         if (data.grid_width !== gridWidth || data.grid_height !== gridHeight) {
             gridWidth = data.grid_width;
@@ -107,86 +140,104 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // 设置新的agent位置
-        const [row, col] = data.state;
-        const cell = document.getElementById(`cell-${row}-${col}`);
-        if (cell) {
-            cell.classList.add('agent');
+        try {
+            // 设置新的agent位置
+            const [row, col] = data.state;
+            console.log(`尝试更新Agent位置: row=${row}, col=${col}`);
+            const cellId = `cell-${row}-${col}`;
+            console.log(`寻找元素: #${cellId}`);
             
-            // 根据智能体类型添加不同样式
-            if (data.agent === 'EnergyAgent') {
-                cell.classList.add('energy-agent');
-                if (cell.classList.contains('target')) {
-                    cell.innerHTML = 'A+T';
+            const cell = document.getElementById(cellId);
+            if (cell) {
+                console.log(`找到单元格 ${cellId}，更新显示`);
+                cell.classList.add('agent');
+                
+                // 根据智能体类型添加不同样式
+                if (data.agent === 'EnergyAgent') {
+                    cell.classList.add('energy-agent');
+                    if (cell.classList.contains('target')) {
+                        cell.innerHTML = 'A+T';
+                    } else {
+                        // 添加能量显示
+                        if (data.energy !== undefined) {
+                            cell.innerHTML = `<div class="agent-indicator">A</div>
+                                             <div class="energy-display">${data.energy.toFixed(1)}</div>`;
+                        } else {
+                            cell.innerHTML = 'A';
+                        }
+                    }
                 } else {
-                    // 添加能量显示
-                    if (data.energy !== undefined) {
-                        cell.innerHTML = `<div class="agent-indicator">A</div>
-                                         <div class="energy-display">${data.energy.toFixed(1)}</div>`;
+                    cell.classList.add('baseline-agent');
+                    if (cell.classList.contains('target')) {
+                        cell.innerHTML = 'A+T';
                     } else {
                         cell.innerHTML = 'A';
                     }
                 }
+                
+                // 添加动画效果
+                cell.classList.add('pulse');
+                setTimeout(() => {
+                    cell.classList.remove('pulse');
+                }, 500);
             } else {
-                cell.classList.add('baseline-agent');
-                if (cell.classList.contains('target')) {
-                    cell.innerHTML = 'A+T';
-                } else {
-                    cell.innerHTML = 'A';
+                console.error(`未找到单元格: #${cellId}`);
+                // 调试信息：输出所有网格单元格的ID
+                const allCells = document.querySelectorAll('.grid-cell');
+                console.log(`当前网格有 ${allCells.length} 个单元格`);
+                if (allCells.length < 20) {
+                    const cellIds = Array.from(allCells).map(c => c.id);
+                    console.log("可用的单元格ID:", cellIds);
                 }
             }
-            
-            // 添加动画效果
-            cell.classList.add('pulse');
-            setTimeout(() => {
-                cell.classList.remove('pulse');
-            }, 500);
+        } catch (error) {
+            console.error("更新网格世界时出错:", error);
         }
     }
     
     // 更新状态信息
     function updateStatusInfo(data) {
-        currentAgentEl.textContent = data.agent;
+        currentAgentEl.textContent = data.agent_name;
         currentStepEl.textContent = data.step;
         
-        // 显示/隐藏能量信息
-        if (data.agent === 'EnergyAgent' && data.energy !== undefined) {
+        // 如果是EnergyAgent，显示能量信息
+        if (data.agent_name === 'EnergyAgent' && data.energy !== undefined) {
             energyInfoEl.style.display = 'block';
             currentEnergyEl.textContent = data.energy.toFixed(1);
+            energyBarEl.style.width = `${(data.energy / 100) * 100}%`;
             
-            // 更新焦虑度和能量条
             if (data.anxiety !== undefined) {
                 currentAnxietyEl.textContent = data.anxiety.toFixed(2);
-                
-                // 设置进度条
-                const energyPercent = Math.min(100, Math.max(0, data.energy / 30 * 100));
-                energyBarEl.style.width = `${energyPercent}%`;
-                
-                // 根据能量级别设置颜色
-                if (energyPercent > 66) {
-                    energyBarEl.className = 'progress-bar bg-success';
-                } else if (energyPercent > 33) {
-                    energyBarEl.className = 'progress-bar bg-warning';
-                } else {
-                    energyBarEl.className = 'progress-bar bg-danger';
-                }
-                
-                // 焦虑进度条
-                const anxietyPercent = Math.min(100, Math.max(0, data.anxiety / 2 * 100));
-                anxietyBarEl.style.width = `${anxietyPercent}%`;
-                
-                // 根据焦虑级别设置颜色
-                if (anxietyPercent < 33) {
-                    anxietyBarEl.className = 'progress-bar bg-success';
-                } else if (anxietyPercent < 66) {
-                    anxietyBarEl.className = 'progress-bar bg-warning';
-                } else {
-                    anxietyBarEl.className = 'progress-bar bg-danger';
-                }
+                anxietyBarEl.style.width = `${data.anxiety * 100}%`;
             }
         } else {
             energyInfoEl.style.display = 'none';
         }
+        
+        // 获取八阶段循环状态
+        if (isRunning) {
+            fetchCycleState();
+        }
+    }
+    
+    // 获取循环状态
+    function fetchCycleState() {
+        fetch('/api/cycle_state')
+            .then(response => response.json())
+            .then(data => {
+                if (cycleVisualizer && data) {
+                    // 将数据转换为可视化器需要的格式
+                    const cycleData = {};
+                    for (const [stage, stateObj] of Object.entries(data.states)) {
+                        cycleData[stage] = {
+                            value: stateObj.value
+                        };
+                    }
+                    // 更新可视化器
+                    cycleVisualizer.updateState(cycleData);
+                }
+            })
+            .catch(error => console.error('获取循环状态失败:', error));
     }
     
     // 添加消息
@@ -313,14 +364,27 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 更新UI状态
-    function updateUIState(isRunning) {
-        startButton.disabled = isRunning;
-        stopButton.disabled = !isRunning;
+    function updateUIState(running) {
+        isRunning = running;
+        startButton.disabled = running;
+        stopButton.disabled = !running;
         
-        // 禁用/启用表单输入
-        document.querySelectorAll('#experimentForm input').forEach(input => {
-            input.disabled = isRunning;
-        });
+        // 如果实验在运行，开始定期获取循环状态
+        if (running) {
+            // 立即获取一次
+            fetchCycleState();
+            
+            // 然后每秒获取一次
+            if (!window.cycleStateInterval) {
+                window.cycleStateInterval = setInterval(fetchCycleState, 1000);
+            }
+        } else {
+            // 停止获取
+            if (window.cycleStateInterval) {
+                clearInterval(window.cycleStateInterval);
+                window.cycleStateInterval = null;
+            }
+        }
     }
     
     // 开始实验处理
@@ -396,24 +460,27 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初始化
     function initialize() {
-        // 初始化Socket连接
+        console.log("初始化应用...");
+        
+        // 初始化Socket.IO连接
         initializeSocket();
         
         // 初始化网格世界
         initializeGridWorld();
         
-        // 添加事件监听器
+        // 初始化循环可视化器
+        cycleVisualizer = new CycleVisualizer('orderStateCycle');
+        
+        // 实验控制按钮事件监听
         startButton.addEventListener('click', handleStartExperiment);
         stopButton.addEventListener('click', handleStopExperiment);
         
-        // 响应式调整
-        window.addEventListener('resize', function() {
-            if (resultsChart) {
-                resultsChart.resize();
-            }
-        });
+        // 初始禁用停止按钮
+        stopButton.disabled = true;
         
-        addMessage('页面已初始化，准备开始实验');
+        // 清空消息容器
+        messageContainer.innerHTML = '';
+        addMessage('系统就绪。请设置参数并点击"开始实验"按钮。');
     }
     
     // 执行初始化
