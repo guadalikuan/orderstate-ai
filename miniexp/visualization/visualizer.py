@@ -12,13 +12,14 @@ class StateVisualizer:
     展示智能体的当前状态和环境
     """
     
-    def __init__(self, width: int, height: int):
+    def __init__(self, width: int, height: int, env_type: str = 'advanced'):
         """
         初始化可视化器
         
         Args:
             width: 环境宽度
             height: 环境高度
+            env_type: 环境类型 ('simple', 'medium', 'advanced')
         """
         # 设置样式
         plt.style.use('seaborn')
@@ -59,10 +60,46 @@ class StateVisualizer:
         self.ax_slider = plt.axes([0.1, 0.05, 0.2, 0.04])
         self.slider = Slider(self.ax_slider, '速度', 0.1, 2.0, valinit=1.0)
         
+        # 添加环境类型选择按钮
+        self.ax_env_buttons = plt.axes([0.3, 0.05, 0.4, 0.04])
+        self.env_buttons = {
+            'simple': Button(plt.axes([0.3, 0.05, 0.1, 0.04]), '简单'),
+            'medium': Button(plt.axes([0.4, 0.05, 0.1, 0.04]), '中等'),
+            'advanced': Button(plt.axes([0.5, 0.05, 0.1, 0.04]), '高级')
+        }
+        
         # 设置回调
         self.button.on_clicked(self.toggle_pause)
         self.slider.on_changed(self.update_speed)
+        for env_type, button in self.env_buttons.items():
+            button.on_clicked(lambda x, env=env_type: self.change_environment(env))
         
+        # 设置环境类型
+        self.env_type = env_type
+        self._update_env_button_states()
+        
+    def change_environment(self, env_type: str):
+        """
+        切换环境类型
+        
+        Args:
+            env_type: 新的环境类型
+        """
+        self.env_type = env_type
+        self._update_env_button_states()
+        print(f"切换到{env_type}环境")
+        
+    def _update_env_button_states(self):
+        """
+        更新环境按钮状态
+        """
+        for env, button in self.env_buttons.items():
+            if env == self.env_type:
+                button.color = 'lightblue'
+            else:
+                button.color = 'white'
+            button.hovercolor = 'lightblue'
+            
     def toggle_pause(self, event):
         """
         切换暂停状态
@@ -124,6 +161,7 @@ class StateVisualizer:
         self.ax_info.axis('off')
         
         info_text = (
+            f"环境类型: {self.env_type}\n"
             f"步数: {state.get('steps', 0)}\n"
             f"奖励: {state.get('reward', 0):.2f}\n"
             f"到目标距离: {state.get('distance_to_target', 0):.2f}\n"

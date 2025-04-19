@@ -5,7 +5,7 @@ import os
 import argparse
 
 # 导入项目模块
-from miniexp.env import GridWorld
+from miniexp.env import SimpleEnvironment, MediumEnvironment, AdvancedEnvironment
 from miniexp.agent import BaselineAgent, EnergyAgent
 from miniexp.metrics import MetricsRecorder, matplotlib_available
 from miniexp.experiment.experiment import Experiment
@@ -20,7 +20,7 @@ MAX_STEPS_PER_EPISODE = GRID_WIDTH * GRID_HEIGHT * 2  # 每回合最大步数
 INIT_ENERGY = (GRID_WIDTH + GRID_HEIGHT) * 1.5   # 初始能量，略多于曼哈顿距离
 ENERGY_THRESHOLD = INIT_ENERGY * 0.2             # 能量阈值，初始能量的20%
 
-def run_experiment():
+def run_experiment(env_type='advanced'):
     """
     运行完整实验并报告结果。
     """
@@ -28,8 +28,12 @@ def run_experiment():
     print(f"初始能量: {INIT_ENERGY}, 能量阈值: {ENERGY_THRESHOLD}")
     
     # 创建环境和智能体
-    env = GridWorld(width=GRID_WIDTH, height=GRID_HEIGHT, 
-                   target_pos=TARGET_POS, start_pos=START_POS)
+    if env_type == 'simple':
+        env = SimpleEnvironment(width=GRID_WIDTH, height=GRID_HEIGHT)
+    elif env_type == 'medium':
+        env = MediumEnvironment(width=GRID_WIDTH, height=GRID_HEIGHT)
+    else:
+        env = AdvancedEnvironment(width=GRID_WIDTH, height=GRID_HEIGHT)
     
     baseline_agent = BaselineAgent(env, name="BaselineAgent")
     energy_agent = EnergyAgent(env, 
@@ -72,7 +76,7 @@ def run_experiment():
                 # [阶段 7 -> 8: 决策 -> 动作] (env.step)
                 
                 # 执行一步
-                next_state, reward, done = agent.step(state)
+                next_state, reward, done, info = env.step(agent.act(state))
                 state = next_state
                 steps += 1
                 
@@ -81,7 +85,7 @@ def run_experiment():
                     if isinstance(agent, EnergyAgent) and agent.is_energy_exhausted():
                         is_success = False
                         energy_exhausted_flag = True
-                    elif state == env.target_pos:
+                    elif info.get('reached_target', False):
                         is_success = True
                     else:
                         is_success = False
@@ -147,7 +151,7 @@ def main():
         
     # 运行实验
     try:
-        experiment.run()
+        run_experiment(env_type=args.env)
     except KeyboardInterrupt:
         print("\n实验被中断")
     finally:
