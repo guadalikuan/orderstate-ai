@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let resultsChart = null;
     let gridWidth = parseInt(document.getElementById('gridWidth').value);
     let gridHeight = parseInt(document.getElementById('gridHeight').value);
+    let cycleVisualizer = null;
+    let isRunning = false;
     
     // DOM元素
     const startButton = document.getElementById('startButton');
@@ -198,44 +200,39 @@ document.addEventListener('DOMContentLoaded', function() {
         currentAgentEl.textContent = data.agent;
         currentStepEl.textContent = data.step;
         
-        // 显示/隐藏能量信息
+        // 如果是EnergyAgent，显示能量信息
         if (data.agent === 'EnergyAgent' && data.energy !== undefined) {
             energyInfoEl.style.display = 'block';
             currentEnergyEl.textContent = data.energy.toFixed(1);
+            energyBarEl.style.width = `${(data.energy / 100) * 100}%`;
             
-            // 更新焦虑度和能量条
             if (data.anxiety !== undefined) {
                 currentAnxietyEl.textContent = data.anxiety.toFixed(2);
-                
-                // 设置进度条
-                const energyPercent = Math.min(100, Math.max(0, data.energy / 30 * 100));
-                energyBarEl.style.width = `${energyPercent}%`;
-                
-                // 根据能量级别设置颜色
-                if (energyPercent > 66) {
-                    energyBarEl.className = 'progress-bar bg-success';
-                } else if (energyPercent > 33) {
-                    energyBarEl.className = 'progress-bar bg-warning';
-                } else {
-                    energyBarEl.className = 'progress-bar bg-danger';
-                }
-                
-                // 焦虑进度条
-                const anxietyPercent = Math.min(100, Math.max(0, data.anxiety / 2 * 100));
-                anxietyBarEl.style.width = `${anxietyPercent}%`;
-                
-                // 根据焦虑级别设置颜色
-                if (anxietyPercent < 33) {
-                    anxietyBarEl.className = 'progress-bar bg-success';
-                } else if (anxietyPercent < 66) {
-                    anxietyBarEl.className = 'progress-bar bg-warning';
-                } else {
-                    anxietyBarEl.className = 'progress-bar bg-danger';
-                }
+                anxietyBarEl.style.width = `${data.anxiety * 100}%`;
             }
         } else {
             energyInfoEl.style.display = 'none';
         }
+        
+        // 获取八阶段循环状态
+        if (isRunning) {
+            fetchCycleState();
+        }
+    }
+    
+    // 获取循环状态
+    function fetchCycleState() {
+        fetch('/api/cycle_state')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // 更新循环可视化
+                    if (cycleVisualizer) {
+                        cycleVisualizer.updateState(data.current);
+                    }
+                }
+            })
+            .catch(error => console.error('获取循环状态出错:', error));
     }
     
     // 添加消息
@@ -362,14 +359,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 更新UI状态
-    function updateUIState(isRunning) {
-        startButton.disabled = isRunning;
-        stopButton.disabled = !isRunning;
+    function updateUIState(running) {
+        isRunning = running;
+        startButton.disabled = running;
+        stopButton.disabled = !running;
         
-        // 禁用/启用表单输入
-        document.querySelectorAll('#experimentForm input').forEach(input => {
-            input.disabled = isRunning;
-        });
+        // 开始或停止循环状态获取
+        if (running && cycleVisualizer) {
+            // 开始定时获取循环状态
+            fetchCycleState();
+        }
     }
     
     // 开始实验处理
@@ -445,22 +444,36 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初始化
     function initialize() {
-        // 初始化Socket连接
+        console.log("初始化应用...");
+        
+        // 初始化Socket.IO连接
         initializeSocket();
         
         // 初始化网格世界
         initializeGridWorld();
         
+        // 初始化八阶段循环可视化器
+        cycleVisualizer = new CycleVisualizer('orderStateCycle');
+        
         // 添加事件监听器
         startButton.addEventListener('click', handleStartExperiment);
         stopButton.addEventListener('click', handleStopExperiment);
         
-        // 响应式调整
-        window.addEventListener('resize', function() {
-            if (resultsChart) {
-                resultsChart.resize();
-            }
+        // 添加表单字段验证
+        document.querySelectorAll('#experimentForm input').forEach(input => {
+            input.addEventListener('change', function() {
+                if (this.id === 'gridWidth' || this.id === 'gridHeight') {
+                    initializeGridWorld();
+                }
+            });
         });
+        
+        // 设置定时获取循环状态（每500毫秒）
+        setInterval(() => {
+            if (isRunning) {
+                fetchCycleState();
+            }
+        }, 500);
         
         addMessage('页面已初始化，准备开始实验');
     }

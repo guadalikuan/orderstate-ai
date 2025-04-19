@@ -1,10 +1,49 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import Tuple, List
+from typing import Tuple, List, Dict, Any, Optional
+import time
+import copy
 
 from .env import GridWorld
 from .modules.attention import AttentionModule
 from .modules.energy import EnergyModule
+
+class StateTracker:
+    """追踪智能体在八阶段循环中的状态流转"""
+    
+    def __init__(self):
+        self.current_cycle = {
+            "energy": {"value": 0, "timestamp": 0},
+            "signal": {"value": None, "timestamp": 0},
+            "data": {"value": None, "timestamp": 0},
+            "information": {"value": None, "timestamp": 0},
+            "knowledge": {"value": None, "timestamp": 0},
+            "wisdom": {"value": None, "timestamp": 0},
+            "decision": {"value": None, "timestamp": 0},
+            "action": {"value": None, "timestamp": 0}
+        }
+        self.history = []
+        
+    def update_state(self, stage, value):
+        """更新特定阶段的状态"""
+        self.current_cycle[stage]["value"] = value
+        self.current_cycle[stage]["timestamp"] = time.time()
+        
+    def complete_cycle(self):
+        """完成当前循环，添加到历史并重置"""
+        self.history.append(copy.deepcopy(self.current_cycle))
+        # 保持能量值，其他重置
+        energy_value = self.current_cycle["energy"]["value"]
+        self.__init__()
+        self.current_cycle["energy"]["value"] = energy_value
+        
+    def get_current_state(self):
+        """获取当前各阶段状态"""
+        return self.current_cycle
+        
+    def get_history(self, limit=10):
+        """获取历史状态"""
+        return self.history[-limit:] if limit else self.history
 
 class BaseAgent(ABC):
     """
@@ -85,6 +124,8 @@ class BaselineAgent(BaseAgent):
         super().__init__(env, name)
         self.feature_dim = 2  # (dx, dy) 特征
         self.attention_module = AttentionModule(feature_dim=self.feature_dim)
+        # 添加状态追踪器
+        self.state_tracker = StateTracker()
 
     def perceive(self, state: Tuple[int, int]) -> np.ndarray:
         """
@@ -136,15 +177,45 @@ class BaselineAgent(BaseAgent):
         Returns:
             Tuple[Tuple[int, int], float, bool]: (下一个状态, 奖励, 是否结束)。
         """
+        # 记录虚拟能量状态 (BaselineAgent不实际管理能量)
+        self.state_tracker.update_state("energy", 100.0)  # 假设始终保持满能量
+        
+        # 记录环境信号
+        env_signal = {"position": state, "target": self.env.target_pos}
+        self.state_tracker.update_state("signal", env_signal)
+        
         # 1. 感知：从环境状态提取特征
         features = self.perceive(state)
+        self.state_tracker.update_state("data", features.tolist())
+        
+        # 使用注意力模块处理特征，固定焦虑为0
+        attention_weights = self.attention_module.compute_attention(features, anxiety=0.0)
+        self.state_tracker.update_state("information", {
+            "attention_weights": attention_weights.tolist(),
+            "anxiety": 0.0
+        })
+        
+        # 决策过程
+        knowledge = {"possible_actions": [0, 1, 2, 3], "values": attention_weights.tolist()}
+        self.state_tracker.update_state("knowledge", knowledge)
+        
+        wisdom = {"best_action_index": int(np.argmax(attention_weights)), 
+                 "confidence": float(np.max(attention_weights) / np.sum(attention_weights))}
+        self.state_tracker.update_state("wisdom", wisdom)
         
         # 2. 决策：根据特征决定行动
         action = self.decide(features)
+        self.state_tracker.update_state("decision", int(action))
         
         # 3. 行动：在环境中执行动作
         # [阶段 7 -> 8: 决策 -> 动作]
         next_state, reward, done = self.env.step(action)
+        action_result = {"action": int(action), "next_state": next_state, 
+                         "reward": float(reward), "done": done}
+        self.state_tracker.update_state("action", action_result)
+        
+        # 完成循环
+        self.state_tracker.complete_cycle()
         
         return next_state, reward, done
 
@@ -176,6 +247,8 @@ class EnergyAgent(BaseAgent):
         self.attention_module = AttentionModule(feature_dim=self.feature_dim)
         self.energy_module = EnergyModule(init_energy=init_energy, threshold=threshold)
         self.energy_exhausted = False
+        # 添加状态追踪器
+        self.state_tracker = StateTracker()
 
     def perceive(self, state: Tuple[int, int]) -> np.ndarray:
         """
@@ -232,24 +305,60 @@ class EnergyAgent(BaseAgent):
         Returns:
             Tuple[Tuple[int, int], float, bool]: (下一个状态, 奖励, 是否结束)。
         """
+        # 记录初始能量状态
+        self.state_tracker.update_state("energy", self.energy_module.get_energy())
+        
         # 首先消耗能量
         # [阶段 8 -> 1: 动作 -> 能量]
         if self.energy_module.consume(amount=1.0):
             # 能量耗尽
             self.energy_exhausted = True
+            self.state_tracker.update_state("action", "energy_exhausted")
+            self.state_tracker.complete_cycle()
             return state, -1.0, True  # 失败，返回当前状态并结束
+        
+        # 记录环境信号
+        env_signal = {"position": state, "target": self.env.target_pos}
+        self.state_tracker.update_state("signal", env_signal)
         
         # 1. 感知：从环境状态提取特征
         # [阶段 2 -> 3: 信号 -> 数据]
         features = self.perceive(state)
+        self.state_tracker.update_state("data", features.tolist())
+        
+        # 获取当前焦虑度
+        # [阶段 1 -> (内部): 能量状态转化为焦虑信号]
+        anxiety = self.energy_module.get_anxiety()
+        
+        # --- 生存焦虑驱动Attention ---
+        # 使用注意力模块计算每个动作的权重，受焦虑影响
+        # [阶段 3 -> 4: 数据 -> 信息] (焦虑影响信息处理)
+        attention_weights = self.attention_module.compute_attention(features, anxiety)
+        self.state_tracker.update_state("information", {
+            "attention_weights": attention_weights.tolist(),
+            "anxiety": anxiety
+        })
+        
+        # 决策过程：信息->知识->智慧->决策
+        # 简化版，实际应拆分这三个阶段
+        knowledge = {"possible_actions": [0, 1, 2, 3], "values": attention_weights.tolist()}
+        self.state_tracker.update_state("knowledge", knowledge)
+        
+        wisdom = {"best_action_index": int(np.argmax(attention_weights)), 
+                  "confidence": float(np.max(attention_weights) / np.sum(attention_weights))}
+        self.state_tracker.update_state("wisdom", wisdom)
         
         # 2. 决策：根据特征和焦虑度决定行动
         # [阶段 4 -> 7: 信息 -> 知识 -> 智慧 -> 决策]
         action = self.decide(features)
+        self.state_tracker.update_state("decision", int(action))
         
         # 3. 行动：在环境中执行动作
         # [阶段 7 -> 8: 决策 -> 动作]
         next_state, reward, done = self.env.step(action)
+        action_result = {"action": int(action), "next_state": next_state, 
+                         "reward": float(reward), "done": done}
+        self.state_tracker.update_state("action", action_result)
         
         # 检查是否完成目标
         if done and next_state == self.env.target_pos:
@@ -259,6 +368,11 @@ class EnergyAgent(BaseAgent):
             # 能量耗尽导致失败
             done = True
             reward = -1.0  # 失败的惩罚
+        
+        # 更新能量状态（完成循环）
+        self.energy_module.update(reward)
+        self.state_tracker.update_state("energy", self.energy_module.get_energy())
+        self.state_tracker.complete_cycle()
         
         return next_state, reward, done
 

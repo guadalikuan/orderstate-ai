@@ -148,6 +148,22 @@
         </div>
     </div>
     
+    <!-- 添加八阶段序态循环可视化 -->
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">八阶段序态循环可视化</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="orderStateCycle" class="order-state-cycle"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- 关于模态框 -->
     <div class="modal fade" id="aboutModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -194,6 +210,7 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- 自定义JS -->
+    <script src="{{ url_for('static', filename='js/cycle_visualizer.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html> 

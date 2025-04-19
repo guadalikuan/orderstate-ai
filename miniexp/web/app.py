@@ -168,7 +168,7 @@ def get_experiment_status():
         'total_episodes': experiment_status['total_episodes']
     })
 
-# API：获取结果汇总
+# API：获取实验结果汇总
 @app.route('/api/experiment_results', methods=['GET'])
 def get_experiment_results():
     if experiment_status['metrics'] is None:
@@ -185,6 +185,20 @@ def get_experiment_results():
         'status': 'success',
         'results': results
     })
+
+# API：获取八阶段循环状态
+@app.route('/api/cycle_state', methods=['GET'])
+def get_cycle_state():
+    """获取当前八阶段循环状态"""
+    if experiment_status['running'] and experiment_status['current_agent']:
+        agent = experiment_status['agents'].get(experiment_status['current_agent'])
+        if agent and hasattr(agent, 'state_tracker'):
+            return jsonify({
+                "status": "success",
+                "current": agent.state_tracker.get_current_state(),
+                "history": agent.state_tracker.get_history(5)
+            })
+    return jsonify({"status": "error", "message": "无可用的循环数据"})
 
 # Socket.IO：当客户端连接时
 @socketio.on('connect')
