@@ -332,8 +332,8 @@ def emit_state_update(agent_name, state, step, energy=None, anxiety=None):
     # 添加日志输出，帮助调试
     print(f"发送状态更新: agent={agent_name}, state={state}, step={step}")
     
-    # 使用带命名空间的emit，确保消息发送到所有客户端
-    socketio.emit('state_update', data, namespace='/', broadcast=True)
+    # 使用正确的参数格式发送状态更新
+    socketio.emit('state_update', data, namespace='/')
 
 # 发送消息到客户端
 def emit_message(message):
