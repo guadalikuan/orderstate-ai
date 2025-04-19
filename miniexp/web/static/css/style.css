@@ -1,0 +1,131 @@
+/* 网格世界容器样式 */
+.grid-container {
+    display: grid;
+    grid-gap: 2px;
+    margin: 10px auto;
+    width: 100%;
+    max-width: 500px;
+    aspect-ratio: 1/1;
+}
+
+/* 网格单元格样式 */
+.grid-cell {
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+/* 特殊单元格样式 */
+.grid-cell.agent {
+    background-color: #4caf50;
+    color: white;
+}
+
+.grid-cell.agent.energy-agent {
+    background-color: #2196f3;
+}
+
+.grid-cell.target {
+    background-color: #f44336;
+    color: white;
+}
+
+.grid-cell.agent.target {
+    background-color: #9c27b0;
+    color: white;
+}
+
+/* 信息容器样式 */
+.message-container {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+}
+
+.message {
+    margin-bottom: 5px;
+    padding: 5px;
+    border-bottom: 1px solid #eee;
+}
+
+.message:last-child {
+    border-bottom: none;
+}
+
+/* 能量和焦虑度指示器样式 */
+.progress {
+    height: 20px;
+    margin-bottom: 10px;
+}
+
+/* 结果表格样式 */
+.results-table {
+    width: 100%;
+    margin-bottom: 15px;
+}
+
+.results-table th, .results-table td {
+    padding: 5px;
+    text-align: center;
+    border: 1px solid #ddd;
+}
+
+.results-table th {
+    background-color: #f0f0f0;
+}
+
+/* 动画效果 */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.pulse {
+    animation: pulse 0.5s;
+}
+
+/* 智能体位置指示器 */
+.agent-indicator {
+    position: absolute;
+    width: 80%;
+    height: 80%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.baseline-agent .agent-indicator {
+    background-color: #4caf50;
+}
+
+.energy-agent .agent-indicator {
+    background-color: #2196f3;
+}
+
+/* 能量显示 */
+.energy-display {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    font-size: 8px;
+    color: white;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 1px 3px;
+    border-radius: 2px;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .grid-container {
+        max-width: 300px;
+    }
+} 

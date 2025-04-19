@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>八阶段闭环与生存焦虑驱动注意力实验</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- 自定义CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">八阶段闭环实验</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#">实验界面</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#aboutModal">关于</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <!-- 左侧控制面板 -->
+            <div class="col-md-3">
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">实验控制</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="experimentForm">
+                            <div class="mb-3">
+                                <label for="gridWidth" class="form-label">网格宽度</label>
+                                <input type="number" class="form-control" id="gridWidth" min="5" max="20" value="{{ config.grid_width }}">
+                            </div>
+                            <div class="mb-3">
+                                <label for="gridHeight" class="form-label">网格高度</label>
+                                <input type="number" class="form-control" id="gridHeight" min="5" max="20" value="{{ config.grid_height }}">
+                            </div>
+                            <div class="mb-3">
+                                <label for="episodes" class="form-label">每个智能体回合数</label>
+                                <input type="number" class="form-control" id="episodes" min="1" max="100" value="{{ config.episodes }}">
+                            </div>
+                            <div class="mb-3">
+                                <label for="maxSteps" class="form-label">最大步数</label>
+                                <input type="number" class="form-control" id="maxSteps" min="10" max="1000" value="{{ config.max_steps }}">
+                            </div>
+                            <div class="mb-3">
+                                <label for="initEnergy" class="form-label">初始能量</label>
+                                <input type="number" class="form-control" id="initEnergy" min="5" max="200" value="{{ config.init_energy }}">
+                            </div>
+                            <div class="mb-3">
+                                <label for="energyThreshold" class="form-label">能量阈值</label>
+                                <input type="number" class="form-control" id="energyThreshold" min="1" max="50" value="{{ config.energy_threshold }}">
+                            </div>
+                            <div class="mb-3">
+                                <label for="displayInterval" class="form-label">显示间隔 (秒)</label>
+                                <input type="number" class="form-control" id="displayInterval" min="0.1" max="2" step="0.1" value="{{ config.display_interval }}">
+                            </div>
+                            <button type="button" id="startButton" class="btn btn-success w-100 mb-2">
+                                <i class="bi bi-play-fill"></i> 开始实验
+                            </button>
+                            <button type="button" id="stopButton" class="btn btn-danger w-100" disabled>
+                                <i class="bi bi-stop-fill"></i> 停止实验
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="card-title mb-0">实时状态</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>当前智能体:</strong> <span id="currentAgent">-</span></p>
+                        <p><strong>回合:</strong> <span id="currentEpisode">0</span>/<span id="totalEpisodes">0</span></p>
+                        <p><strong>步数:</strong> <span id="currentStep">0</span></p>
+                        <div id="energyInfo" style="display:none;">
+                            <p><strong>剩余能量:</strong> <span id="currentEnergy">0</span></p>
+                            <p><strong>焦虑度:</strong> <span id="currentAnxiety">0</span></p>
+                            <div class="progress mb-3">
+                                <div id="energyBar" class="progress-bar bg-success" style="width: 100%"></div>
+                            </div>
+                            <div class="progress">
+                                <div id="anxietyBar" class="progress-bar bg-warning" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 中间可视化区域 -->
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="card-title mb-0">网格世界可视化</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="gridWorld" class="grid-container"></div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="card-title mb-0">实验信息</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="messageContainer" class="message-container"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧结果区域 -->
+            <div class="col-md-3">
+                <div class="card mb-4">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="card-title mb-0">实验结果</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="resultsContainer">
+                            <p class="text-center text-muted">实验结束后将显示结果</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="card-title mb-0">对比图表</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="resultsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 关于模态框 -->
+    <div class="modal fade" id="aboutModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">关于八阶段闭环与生存焦虑驱动注意力实验</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h4>项目概述</h4>
+                    <p>此实验旨在演示"能量→信号→数据→信息→知识→智慧→决策→动作→能量"八阶段闭环及"生存焦虑驱动Attention"机制。</p>
+                    
+                    <h4>八阶段闭环</h4>
+                    <ol>
+                        <li><strong>能量 → 信号</strong>: 智能体当前的能量状态影响内部焦虑信号</li>
+                        <li><strong>信号 → 数据</strong>: 环境状态被感知并转化为特征表示</li>
+                        <li><strong>数据 → 信息</strong>: 注意力机制处理特征，生成信息</li>
+                        <li><strong>信息 → 知识</strong>: 智能体内部模型解释信息</li>
+                        <li><strong>知识 → 智慧</strong>: 智能体根据知识权衡不同决策</li>
+                        <li><strong>智慧 → 决策</strong>: 选择最佳行动</li>
+                        <li><strong>决策 → 动作</strong>: 执行选定的动作</li>
+                        <li><strong>动作 → 能量</strong>: 行动消耗能量，循环回到第一阶段</li>
+                    </ol>
+                    
+                    <h4>生存焦虑驱动注意力</h4>
+                    <p>当能量智能体的能量接近阈值时，会产生生存焦虑，这种焦虑会影响注意力分配：</p>
+                    <ul>
+                        <li>焦虑度越高，注意力分布越集中（更尖锐）</li>
+                        <li>焦虑度越低，注意力分布越均匀（更平缓）</li>
+                    </ul>
+                    <p>这模拟了生物在生存压力下的注意力聚焦现象。</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- 自定义JS -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html> 
